@@ -7,8 +7,8 @@
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1",
     "asc": "asc src/index.ts -o build/build.wasm --optimize --exportRuntime --runPasses asyncify",
-    "asc:debug": "asc src/index.ts --target debug",
-    "compile": ""
+    "asc:debug": "asc src/index.ts --target debug; node list-exports.js",
+    "start": "pnpm run asc; pnpm run asc:debug"
   },
   "keywords": [],
   "author": "",
