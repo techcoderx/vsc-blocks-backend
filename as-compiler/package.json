@@ -16,9 +16,7 @@
   "devDependencies": {
     "@vsc.eco/contract-testing-utils": "^0.1.5",
     "@vsc.eco/sdk": "^0.1.4",
-    "assemblyscript": "^0.27.31"
-  },
-  "dependencies": {
+    "assemblyscript": "^0.27.31",
     "assemblyscript-json": "^1.1.0"
   }
 }

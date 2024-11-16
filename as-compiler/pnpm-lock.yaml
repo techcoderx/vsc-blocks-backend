@@ -4,11 +4,6 @@ settings:
   autoInstallPeers: true
   excludeLinksFromLockfile: false
 
-dependencies:
-  assemblyscript-json:
-    specifier: ^1.1.0
-    version: 1.1.0
-
 devDependencies:
   '@vsc.eco/contract-testing-utils':
     specifier: ^0.1.5
@@ -19,6 +14,9 @@ devDependencies:
   assemblyscript:
     specifier: ^0.27.31
     version: 0.27.31
+  assemblyscript-json:
+    specifier: ^1.1.0
+    version: 1.1.0
 
 packages:
 
@@ -87,6 +85,7 @@ packages:
 
   /assemblyscript-json@1.1.0:
     resolution: {integrity: sha512-UbE8ts8csTWQgd5TnSPN7MRV9NveuHv1bVnKmDLoo/tzjqxkmsZb3lu59Uk8H7SGoqdkDSEE049alx/nHnSdFw==}
+    dev: true
 
   /assemblyscript@0.27.31:
     resolution: {integrity: sha512-Ra8kiGhgJQGZcBxjtMcyVRxOEJZX64kd+XGpjWzjcjgxWJVv+CAQO0aDBk4GQVhjYbOkATarC83mHjAVGtwPBQ==}
