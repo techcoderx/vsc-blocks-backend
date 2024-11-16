@@ -1,11 +1,11 @@
 {
-    "compilerOptions": {
-        "module": "ES2022",
-        "target": "ES2017",
-        "moduleResolution": "Node",
-        "paths": {
-            "@@/*": ["./*"],
-        },
-        "types": ["@vsc.eco/contract-testing-utils/contract", "./contract.d.ts"]
-    }
+  "compilerOptions": {
+    "module": "ES2022",
+    "target": "ES2017",
+    "moduleResolution": "Node",
+    "paths": {
+      "@@/*": ["./*"]
+    },
+    "types": ["@vsc.eco/contract-testing-utils/contract", "./contract.d.ts"]
+  }
 }
