@@ -1,6 +1,7 @@
 node_modules
 src
 build
+package-template.json
 package.json
 pnpm-lock.yaml
 yarn.lock

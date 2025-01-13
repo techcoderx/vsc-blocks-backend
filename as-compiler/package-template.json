@@ -5,11 +5,5 @@
   "scripts": {
     "asc": "asc src/index.ts -o build/build.wasm --optimize --exportRuntime --runPasses asyncify",
     "asc:debug": "asc src/index.ts --target debug; node list-exports.js"
-  },
-  "devDependencies": {
-    "@vsc.eco/contract-testing-utils": "^0.1.5",
-    "@vsc.eco/sdk": "^0.1.4",
-    "assemblyscript": "^0.27.31",
-    "assemblyscript-json": "^1.1.0"
   }
 }
