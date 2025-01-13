@@ -2,17 +2,11 @@
   "name": "as-compiler",
   "version": "1.0.0",
   "type": "module",
-  "description": "",
-  "main": "index.js",
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1",
     "asc": "asc src/index.ts -o build/build.wasm --optimize --exportRuntime --runPasses asyncify",
     "asc:debug": "asc src/index.ts --target debug; node list-exports.js",
     "start": "pnpm run asc; pnpm run asc:debug"
   },
-  "keywords": [],
-  "author": "",
-  "license": "ISC",
   "devDependencies": {
     "@vsc.eco/contract-testing-utils": "^0.1.5",
     "@vsc.eco/sdk": "^0.1.4",
