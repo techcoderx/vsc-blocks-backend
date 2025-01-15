@@ -20,6 +20,7 @@ pub struct ServerConfig {
 #[derive(Deserialize)]
 pub struct TomlConfig {
   pub log_level: Option<String>,
+  pub psql_url: String,
   pub server: ServerConfig,
 }
 
