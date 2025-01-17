@@ -13,7 +13,11 @@ async fn main() -> std::io::Result<()> {
   env_logger::init();
   let db_pool = db::init_pool().unwrap();
   HttpServer::new(move || {
-    App::new().app_data(web::Data::new(db_pool.clone())).service(server::hello).service(server::echo).service(server::hey)
+    App::new()
+      .app_data(web::Data::new(db_pool.clone()))
+      .service(server::hello)
+      .service(server::list_langs)
+      .service(server::list_licenses)
   })
     .bind((config.server.address.as_str(), config.server.port))?
     .run().await
