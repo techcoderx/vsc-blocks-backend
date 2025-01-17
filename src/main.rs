@@ -11,7 +11,7 @@ async fn main() -> std::io::Result<()> {
     std::env::set_var("RUST_LOG", config.log_level.clone().unwrap_or(String::from("info")));
   }
   env_logger::init();
-  let db_pool = db::init_pool().unwrap();
+  let db_pool = db::DbPool::init().unwrap();
   HttpServer::new(move || {
     App::new()
       .app_data(web::Data::new(db_pool.clone()))

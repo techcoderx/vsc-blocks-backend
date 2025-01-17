@@ -16,25 +16,32 @@ impl fmt::Display for DbQueryError {
   }
 }
 
-pub fn init_pool() -> Result<Pool<Manager>, CreatePoolError> {
-  let mut cfg = Config::new();
-  cfg.url = Some(config::Config.psql_url.clone());
-  cfg.manager = Some(ManagerConfig {
-    recycling_method: RecyclingMethod::Fast,
-  });
-  let pool = cfg.create_pool(Some(Runtime::Tokio1), NoTls)?;
-  Ok(pool)
+#[derive(Clone)]
+pub struct DbPool {
+  pool: Pool<Manager>,
 }
 
-pub async fn query(pool: Pool<Manager>, statement: &str, params: &[&(dyn ToSql + Sync)]) -> Result<Vec<Row>, DbQueryError> {
-  let client = match pool.get().await {
-    Ok(v) => v,
-    Err(e) => {
-      return Err(DbQueryError { message: e.to_string() });
+impl DbPool {
+  pub fn init() -> Result<Self, CreatePoolError> {
+    let mut cfg = Config::new();
+    cfg.url = Some(config::Config.psql_url.clone());
+    cfg.manager = Some(ManagerConfig {
+      recycling_method: RecyclingMethod::Fast,
+    });
+    let pool = cfg.create_pool(Some(Runtime::Tokio1), NoTls)?;
+    Ok(Self { pool })
+  }
+
+  pub async fn query(&self, statement: &str, params: &[&(dyn ToSql + Sync)]) -> Result<Vec<Row>, DbQueryError> {
+    let client = match self.pool.get().await {
+      Ok(v) => v,
+      Err(e) => {
+        return Err(DbQueryError { message: e.to_string() });
+      }
+    };
+    match client.query(statement, params).await {
+      Ok(rows) => Ok(rows),
+      Err(e) => Err(DbQueryError { message: e.to_string() }),
     }
-  };
-  match client.query(statement, params).await {
-    Ok(rows) => Ok(rows),
-    Err(e) => Err(DbQueryError { message: e.to_string() }),
   }
 }

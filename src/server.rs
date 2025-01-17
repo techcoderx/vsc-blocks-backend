@@ -1,9 +1,7 @@
 use actix_web::{ get, web, HttpResponse, Responder };
-use deadpool_postgres::Manager;
-use deadpool::managed::Pool;
 use serde_json;
 use log;
-use crate::db;
+use crate::db::DbPool;
 
 const GENERIC_DB_ERR: &str = "Unknown error occured when querying database";
 
@@ -13,8 +11,9 @@ async fn hello() -> impl Responder {
 }
 
 #[get("/languages")]
-async fn list_langs(db_pool: web::Data<Pool<Manager>>) -> impl Responder {
-  let rows = match db::query(db_pool.get_ref().clone(), "SELECT jsonb_agg(name) FROM vsc_cv.languages;", &[]).await {
+async fn list_langs(ctx: web::Data<DbPool>) -> impl Responder {
+  let db = ctx.get_ref().clone();
+  let rows = match db.query("SELECT jsonb_agg(name) FROM vsc_cv.languages;", &[]).await {
     Ok(r) => r,
     Err(e) => {
       log::error!("GET /languages failed: {}", e.to_string());
@@ -26,8 +25,9 @@ async fn list_langs(db_pool: web::Data<Pool<Manager>>) -> impl Responder {
 }
 
 #[get("/licenses")]
-async fn list_licenses(db_pool: web::Data<Pool<Manager>>) -> impl Responder {
-  let rows = match db::query(db_pool.get_ref().clone(), "SELECT jsonb_agg(name) FROM vsc_cv.licenses;", &[]).await {
+async fn list_licenses(ctx: web::Data<DbPool>) -> impl Responder {
+  let db = ctx.get_ref().clone();
+  let rows = match db.query("SELECT jsonb_agg(name) FROM vsc_cv.licenses;", &[]).await {
     Ok(r) => r,
     Err(e) => {
       log::error!("GET /licenses failed: {}", e.to_string());
