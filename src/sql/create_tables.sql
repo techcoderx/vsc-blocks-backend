@@ -1,18 +1,18 @@
 CREATE SCHEMA vsc_cv;
 
 CREATE TABLE vsc_cv.languages(
-  id SMALLSERIAL PRIMARY KEY,
-  name VARCHAR(20)
+  id SMALLINT PRIMARY KEY,
+  name VARCHAR(20) UNIQUE
 );
 
 CREATE TABLE vsc_cv.licenses(
-  id SMALLSERIAL PRIMARY KEY,
-  name VARCHAR(20)
+  id SMALLINT PRIMARY KEY,
+  name VARCHAR(20) UNIQUE
 );
 
 CREATE TABLE vsc_cv.status(
-  id SMALLSERIAL PRIMARY KEY,
-  name VARCHAR(20)
+  id SMALLINT PRIMARY KEY,
+  name VARCHAR(20) UNIQUE
 );
 
 CREATE TABLE vsc_cv.contracts(
@@ -34,19 +34,24 @@ CREATE TABLE vsc_cv.source_code(
   PRIMARY KEY(contract_addr, fname)
 );
 
-INSERT INTO vsc_cv.status(name) VALUES ('pending');
-INSERT INTO vsc_cv.status(name) VALUES ('success');
-INSERT INTO vsc_cv.status(name) VALUES ('failed');
+INSERT INTO vsc_cv.status(id, name) VALUES (0, 'pending');
+INSERT INTO vsc_cv.status(id, name) VALUES (1, 'success');
+INSERT INTO vsc_cv.status(id, name) VALUES (2, 'failed');
 
-INSERT INTO vsc_cv.licenses(name) VALUES ('MIT');
-INSERT INTO vsc_cv.licenses(name) VALUES ('Apache 2.0');
-INSERT INTO vsc_cv.licenses(name) VALUES ('GPLv3');
-INSERT INTO vsc_cv.licenses(name) VALUES ('LGPLv3');
-INSERT INTO vsc_cv.licenses(name) VALUES ('AGPLv3');
-INSERT INTO vsc_cv.licenses(name) VALUES ('MPL 2.0');
-INSERT INTO vsc_cv.licenses(name) VALUES ('WTFPL');
-INSERT INTO vsc_cv.licenses(name) VALUES ('Unlicense');
+-- Names must follow SPDX identifier listed in https://spdx.org/licenses
+-- Full text may be found in https://github.com/spdx/license-list-data/tree/main/text
+INSERT INTO vsc_cv.licenses(id, name) VALUES (0, 'MIT');
+INSERT INTO vsc_cv.licenses(id, name) VALUES (1, 'Apache-2.0');
+INSERT INTO vsc_cv.licenses(id, name) VALUES (2, 'GPL-3.0-only');
+INSERT INTO vsc_cv.licenses(id, name) VALUES (3, 'GPL-3.0-or-later');
+INSERT INTO vsc_cv.licenses(id, name) VALUES (4, 'LGPL-3.0-only');
+INSERT INTO vsc_cv.licenses(id, name) VALUES (5, 'LGPL-3.0-or-later');
+INSERT INTO vsc_cv.licenses(id, name) VALUES (6, 'AGPL-3.0-only');
+INSERT INTO vsc_cv.licenses(id, name) VALUES (7, 'AGPL-3.0-or-later');
+INSERT INTO vsc_cv.licenses(id, name) VALUES (8, 'MPL 2.0');
+INSERT INTO vsc_cv.licenses(id, name) VALUES (9, 'WTFPL');
+INSERT INTO vsc_cv.licenses(id, name) VALUES (10, 'Unlicense');
 
-INSERT INTO vsc_cv.languages(name) VALUES ('assemblyscript');
-INSERT INTO vsc_cv.languages(name) VALUES ('golang');
-INSERT INTO vsc_cv.languages(name) VALUES ('rust');
+INSERT INTO vsc_cv.languages(id, name) VALUES (0, 'assemblyscript');
+INSERT INTO vsc_cv.languages(id, name) VALUES (1, 'golang');
+INSERT INTO vsc_cv.languages(id, name) VALUES (2, 'rust');

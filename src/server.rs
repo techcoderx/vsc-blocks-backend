@@ -14,13 +14,7 @@ async fn hello() -> impl Responder {
 
 #[get("/languages")]
 async fn list_langs(db_pool: web::Data<Pool<Manager>>) -> impl Responder {
-  let rows = match
-    db::query(
-      db_pool.get_ref().clone(),
-      "SELECT jsonb_agg(jsonb_build_object('id',id,'name',name)) FROM vsc_cv.languages",
-      &[]
-    ).await
-  {
+  let rows = match db::query(db_pool.get_ref().clone(), "SELECT jsonb_agg(name) FROM vsc_cv.languages;", &[]).await {
     Ok(r) => r,
     Err(e) => {
       log::error!("GET /languages failed: {}", e.to_string());
@@ -33,13 +27,7 @@ async fn list_langs(db_pool: web::Data<Pool<Manager>>) -> impl Responder {
 
 #[get("/licenses")]
 async fn list_licenses(db_pool: web::Data<Pool<Manager>>) -> impl Responder {
-  let rows = match
-    db::query(
-      db_pool.get_ref().clone(),
-      "SELECT jsonb_agg(jsonb_build_object('id',id,'name',name)) FROM vsc_cv.licenses",
-      &[]
-    ).await
-  {
+  let rows = match db::query(db_pool.get_ref().clone(), "SELECT jsonb_agg(name) FROM vsc_cv.licenses;", &[]).await {
     Ok(r) => r,
     Err(e) => {
       log::error!("GET /licenses failed: {}", e.to_string());
