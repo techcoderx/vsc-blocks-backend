@@ -1,6 +1,6 @@
 use deadpool_postgres::{ Config, CreatePoolError, Manager, ManagerConfig, RecyclingMethod, Runtime };
 use deadpool::managed::{ Pool, Object };
-use tokio_postgres::{ types::ToSql, NoTls, Row };
+use tokio_postgres::{ types::ToSql, NoTls, Row, types::Type };
 use sql_minifier::macros::load_sql;
 use std::{ fmt, error };
 use log::info;
@@ -56,9 +56,9 @@ impl DbPool {
     Ok(())
   }
 
-  pub async fn query(&self, statement: &str, params: &[&(dyn ToSql + Sync)]) -> Result<Vec<Row>, DbQueryError> {
+  pub async fn query(&self, statement: &str, params: &[(&(dyn ToSql + Sync), Type)]) -> Result<Vec<Row>, DbQueryError> {
     let client = self.get_client().await?;
-    match client.query(statement, params).await {
+    match client.query_typed(statement, params).await {
       Ok(rows) => Ok(rows),
       Err(e) => Err(DbQueryError { message: e.to_string() }),
     }
