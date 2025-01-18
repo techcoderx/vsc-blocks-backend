@@ -1,5 +1,7 @@
 use actix_web::{ web, App, HttpServer };
 use env_logger;
+use std::process;
+use log::error;
 mod config;
 mod db;
 mod server;
@@ -12,6 +14,13 @@ async fn main() -> std::io::Result<()> {
   }
   env_logger::init();
   let db_pool = db::DbPool::init().unwrap();
+  match db_pool.setup().await {
+    Ok(_) => (),
+    Err(e) => {
+      error!("Failed to setup db: {}", e.to_string());
+      process::exit(1);
+    }
+  }
   HttpServer::new(move || {
     App::new()
       .app_data(web::Data::new(db_pool.clone()))

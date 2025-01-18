@@ -1,8 +1,12 @@
 use deadpool_postgres::{ Config, CreatePoolError, Manager, ManagerConfig, RecyclingMethod, Runtime };
-use deadpool::managed::Pool;
+use deadpool::managed::{ Pool, Object };
 use tokio_postgres::{ types::ToSql, NoTls, Row };
+use sql_minifier::macros::load_sql;
 use std::{ fmt, error };
+use log::info;
 use crate::config;
+
+const PSQL_CREATE_TABLES: &str = load_sql!("src/sql/create_tables.sql");
 
 #[derive(Debug)]
 pub struct DbQueryError {
@@ -32,15 +36,38 @@ impl DbPool {
     Ok(Self { pool })
   }
 
-  pub async fn query(&self, statement: &str, params: &[&(dyn ToSql + Sync)]) -> Result<Vec<Row>, DbQueryError> {
-    let client = match self.pool.get().await {
-      Ok(v) => v,
+  async fn get_client(&self) -> Result<Object<Manager>, DbQueryError> {
+    match self.pool.get().await {
+      Ok(v) => Ok(v),
       Err(e) => {
         return Err(DbQueryError { message: e.to_string() });
       }
-    };
+    }
+  }
+
+  pub async fn setup(&self) -> Result<(), DbQueryError> {
+    let loaded = self.query("SELECT 1 FROM pg_catalog.pg_tables WHERE schemaname='vsc_cv';", &[]).await?.len() > 0;
+    if !loaded {
+      info!("Setting up VSC contract verifier database...");
+      self.execute_file(PSQL_CREATE_TABLES).await?;
+    } else {
+      info!("Connected to database successfully");
+    }
+    Ok(())
+  }
+
+  pub async fn query(&self, statement: &str, params: &[&(dyn ToSql + Sync)]) -> Result<Vec<Row>, DbQueryError> {
+    let client = self.get_client().await?;
     match client.query(statement, params).await {
       Ok(rows) => Ok(rows),
+      Err(e) => Err(DbQueryError { message: e.to_string() }),
+    }
+  }
+
+  pub async fn execute_file(&self, statement: &str) -> Result<(), DbQueryError> {
+    let client = self.get_client().await?;
+    match client.batch_execute(statement).await {
+      Ok(_) => Ok(()),
       Err(e) => Err(DbQueryError { message: e.to_string() }),
     }
   }

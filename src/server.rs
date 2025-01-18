@@ -17,7 +17,7 @@ async fn list_langs(ctx: web::Data<DbPool>) -> impl Responder {
     Ok(r) => r,
     Err(e) => {
       log::error!("GET /languages failed: {}", e.to_string());
-      return HttpResponse::BadGateway().json(serde_json::json!({ "error": GENERIC_DB_ERR }));
+      return HttpResponse::InternalServerError().json(serde_json::json!({ "error": GENERIC_DB_ERR }));
     }
   };
   let result: serde_json::Value = rows[0].get(0);
@@ -31,7 +31,7 @@ async fn list_licenses(ctx: web::Data<DbPool>) -> impl Responder {
     Ok(r) => r,
     Err(e) => {
       log::error!("GET /licenses failed: {}", e.to_string());
-      return HttpResponse::BadGateway().json(serde_json::json!({ "error": GENERIC_DB_ERR }));
+      return HttpResponse::InternalServerError().json(serde_json::json!({ "error": GENERIC_DB_ERR }));
     }
   };
   let result: serde_json::Value = rows[0].get(0);
