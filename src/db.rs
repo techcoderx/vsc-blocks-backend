@@ -9,12 +9,12 @@ use crate::config;
 const PSQL_CREATE_TABLES: &str = load_sql!("src/sql/create_tables.sql");
 
 #[derive(Debug)]
-pub struct DbQueryError {
+pub struct DbError {
   message: String,
 }
 
-impl error::Error for DbQueryError {}
-impl fmt::Display for DbQueryError {
+impl error::Error for DbError {}
+impl fmt::Display for DbError {
   fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
     write!(f, "{}", self.message)
   }
@@ -36,12 +36,12 @@ impl DbPool {
     Ok(Self { pool })
   }
 
-  async fn get_client(&self) -> Result<Object<Manager>, DbQueryError> {
-    let c = self.pool.get().await.map_err(|e| DbQueryError { message: e.to_string() })?;
+  async fn get_client(&self) -> Result<Object<Manager>, DbError> {
+    let c = self.pool.get().await.map_err(|e| DbError { message: e.to_string() })?;
     Ok(c)
   }
 
-  pub async fn setup(&self) -> Result<(), DbQueryError> {
+  pub async fn setup(&self) -> Result<(), DbError> {
     let loaded = self.query("SELECT 1 FROM pg_catalog.pg_tables WHERE schemaname='vsc_cv';", &[]).await?.len() > 0;
     if !loaded {
       info!("Setting up VSC contract verifier database...");
@@ -52,15 +52,15 @@ impl DbPool {
     Ok(())
   }
 
-  pub async fn query(&self, statement: &str, params: &[(&(dyn ToSql + Sync), Type)]) -> Result<Vec<Row>, DbQueryError> {
+  pub async fn query(&self, statement: &str, params: &[(&(dyn ToSql + Sync), Type)]) -> Result<Vec<Row>, DbError> {
     let client = self.get_client().await?;
-    let rows = client.query_typed(statement, params).await.map_err(|e| DbQueryError { message: e.to_string() })?;
+    let rows = client.query_typed(statement, params).await.map_err(|e| DbError { message: e.to_string() })?;
     Ok(rows)
   }
 
-  pub async fn execute_file(&self, statement: &str) -> Result<(), DbQueryError> {
+  pub async fn execute_file(&self, statement: &str) -> Result<(), DbError> {
     let client = self.get_client().await?;
-    client.batch_execute(statement).await.map_err(|e| DbQueryError { message: e.to_string() })?;
+    client.batch_execute(statement).await.map_err(|e| DbError { message: e.to_string() })?;
     Ok(())
   }
 }
