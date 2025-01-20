@@ -37,12 +37,8 @@ impl DbPool {
   }
 
   async fn get_client(&self) -> Result<Object<Manager>, DbQueryError> {
-    match self.pool.get().await {
-      Ok(v) => Ok(v),
-      Err(e) => {
-        return Err(DbQueryError { message: e.to_string() });
-      }
-    }
+    let c = self.pool.get().await.map_err(|e| DbQueryError { message: e.to_string() })?;
+    Ok(c)
   }
 
   pub async fn setup(&self) -> Result<(), DbQueryError> {
@@ -58,17 +54,13 @@ impl DbPool {
 
   pub async fn query(&self, statement: &str, params: &[(&(dyn ToSql + Sync), Type)]) -> Result<Vec<Row>, DbQueryError> {
     let client = self.get_client().await?;
-    match client.query_typed(statement, params).await {
-      Ok(rows) => Ok(rows),
-      Err(e) => Err(DbQueryError { message: e.to_string() }),
-    }
+    let rows = client.query_typed(statement, params).await.map_err(|e| DbQueryError { message: e.to_string() })?;
+    Ok(rows)
   }
 
   pub async fn execute_file(&self, statement: &str) -> Result<(), DbQueryError> {
     let client = self.get_client().await?;
-    match client.batch_execute(statement).await {
-      Ok(_) => Ok(()),
-      Err(e) => Err(DbQueryError { message: e.to_string() }),
-    }
+    client.batch_execute(statement).await.map_err(|e| DbQueryError { message: e.to_string() })?;
+    Ok(())
   }
 }
