@@ -30,14 +30,14 @@ impl TomlConfig {
     let contents = fs::read_to_string(file_path)?;
 
     // Deserialize the TOML into the Config struct
-    let config: TomlConfig = toml::de::from_str(&contents)?;
+    let deserialized: TomlConfig = toml::de::from_str(&contents)?;
 
-    Ok(config)
+    Ok(deserialized)
   }
 }
 
 lazy_static! {
-  pub static ref Config: TomlConfig = TomlConfig::read_from_file(Args::parse().config_file.as_str()).expect(
+  pub static ref config: TomlConfig = TomlConfig::read_from_file(Args::parse().config_file.as_str()).expect(
     "Failed to load config"
   );
 }

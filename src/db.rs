@@ -28,7 +28,7 @@ pub struct DbPool {
 impl DbPool {
   pub fn init() -> Result<Self, CreatePoolError> {
     let mut cfg = Config::new();
-    cfg.url = Some(config::Config.psql_url.clone());
+    cfg.url = Some(config::config.psql_url.clone());
     cfg.manager = Some(ManagerConfig {
       recycling_method: RecyclingMethod::Fast,
     });

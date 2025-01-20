@@ -8,7 +8,7 @@ mod server;
 
 #[actix_web::main]
 async fn main() -> std::io::Result<()> {
-  let config = &config::Config;
+  let config = &config::config;
   if std::env::var("RUST_LOG").is_err() {
     std::env::set_var("RUST_LOG", config.log_level.clone().unwrap_or(String::from("info")));
   }
