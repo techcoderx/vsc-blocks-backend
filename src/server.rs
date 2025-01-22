@@ -4,19 +4,35 @@ use tokio_postgres::types::Type;
 use serde::{ Serialize, Deserialize };
 use serde_json;
 use reqwest;
+use log::error;
+use std::fmt;
 use crate::db::DbPool;
 use crate::vsc_types;
 use crate::config::config;
 
-#[derive(Debug, Display, Error)]
+#[derive(Display, Error)]
 enum RespErr {
-  #[display("Unknown error occured when querying database")]
-  DbErr,
+  #[display("Unknown error occured when querying database")] DbErr {
+    msg: String,
+  },
   #[display("Failed to query VSC-HAF backend")] VscHafErr,
+}
+
+impl fmt::Debug for RespErr {
+  fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+    match self {
+      RespErr::DbErr { msg } => write!(f, "{}", msg),
+      RespErr::VscHafErr => Ok(()),
+    }
+  }
 }
 
 impl actix_web::error::ResponseError for RespErr {
   fn error_response(&self) -> HttpResponse<actix_web::body::BoxBody> {
+    let e = format!("{:?}", self);
+    if e.len() > 0 {
+      error!("{}", e);
+    }
     HttpResponse::build(self.status_code())
       .insert_header(ContentType::json())
       .json(serde_json::json!({ "error": self.to_string() }))
@@ -24,7 +40,7 @@ impl actix_web::error::ResponseError for RespErr {
 
   fn status_code(&self) -> StatusCode {
     match *self {
-      RespErr::DbErr => StatusCode::INTERNAL_SERVER_ERROR,
+      RespErr::DbErr { .. } => StatusCode::INTERNAL_SERVER_ERROR,
       RespErr::VscHafErr => StatusCode::INTERNAL_SERVER_ERROR,
     }
   }
@@ -67,20 +83,16 @@ async fn verify_new(req_data: web::Json<ReqVerifyNew>, ctx: web::Data<DbPool>) -
         (&req_data.lang, Type::VARCHAR),
       ]
     ).await
-    .map_err(|_| RespErr::DbErr)?;
+    .map_err(|e| RespErr::DbErr { msg: e.to_string() })?;
   Ok(HttpResponse::Ok().json(serde_json::json!({ "success": true })))
 }
 
 #[get("/languages")]
 async fn list_langs(ctx: web::Data<DbPool>) -> Result<HttpResponse, RespErr> {
   let db = ctx.get_ref().clone();
-  let rows = match db.query("SELECT jsonb_agg(name) FROM vsc_cv.languages;", &[]).await {
-    Ok(r) => r,
-    Err(e) => {
-      log::error!("GET /languages failed: {}", e.to_string());
-      return Err(RespErr::DbErr);
-    }
-  };
+  let rows = db
+    .query("SELECT jsonb_agg(name) FROM vsc_cv.languages;", &[]).await
+    .map_err(|e| RespErr::DbErr { msg: e.to_string() })?;
   let result: serde_json::Value = rows[0].get(0);
   Ok(HttpResponse::Ok().json(result))
 }
@@ -88,13 +100,9 @@ async fn list_langs(ctx: web::Data<DbPool>) -> Result<HttpResponse, RespErr> {
 #[get("/licenses")]
 async fn list_licenses(ctx: web::Data<DbPool>) -> Result<HttpResponse, RespErr> {
   let db = ctx.get_ref().clone();
-  let rows = match db.query("SELECT jsonb_agg(name) FROM vsc_cv.licenses;", &[]).await {
-    Ok(r) => r,
-    Err(e) => {
-      log::error!("GET /licenses failed: {}", e.to_string());
-      return Err(RespErr::DbErr);
-    }
-  };
+  let rows = db
+    .query("SELECT jsonb_agg(name) FROM vsc_cv.licenses;", &[]).await
+    .map_err(|e| RespErr::DbErr { msg: e.to_string() })?;
   let result: serde_json::Value = rows[0].get(0);
   Ok(HttpResponse::Ok().json(result))
 }
