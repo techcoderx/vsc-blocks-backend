@@ -21,6 +21,7 @@ pub struct ServerConfig {
 pub struct TomlConfig {
   pub log_level: Option<String>,
   pub psql_url: String,
+  pub vsc_haf_url: String,
   pub server: ServerConfig,
 }
 

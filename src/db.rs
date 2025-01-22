@@ -7,6 +7,7 @@ use log::info;
 use crate::config;
 
 const PSQL_CREATE_TABLES: &str = load_sql!("src/sql/create_tables.sql");
+const PSQL_FX: &str = load_sql!("src/sql/create_functions.sql");
 
 #[derive(Debug)]
 pub struct DbError {
@@ -49,6 +50,7 @@ impl DbPool {
     } else {
       info!("Connected to database successfully");
     }
+    self.execute_file(PSQL_FX).await?;
     Ok(())
   }
 

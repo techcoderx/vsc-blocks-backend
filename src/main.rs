@@ -5,6 +5,7 @@ use log::error;
 mod config;
 mod db;
 mod server;
+mod vsc_types;
 
 #[actix_web::main]
 async fn main() -> std::io::Result<()> {
@@ -13,7 +14,13 @@ async fn main() -> std::io::Result<()> {
     std::env::set_var("RUST_LOG", config.log_level.clone().unwrap_or(String::from("info")));
   }
   env_logger::init();
-  let db_pool = db::DbPool::init().unwrap();
+  let db_pool = match db::DbPool::init() {
+    Ok(p) => p,
+    Err(e) => {
+      error!("Failed to initialize db pool: {}", e.to_string());
+      process::exit(1);
+    }
+  };
   match db_pool.setup().await {
     Ok(_) => (),
     Err(e) => {
@@ -25,6 +32,7 @@ async fn main() -> std::io::Result<()> {
     App::new()
       .app_data(web::Data::new(db_pool.clone()))
       .service(server::hello)
+      .service(server::verify_new)
       .service(server::list_langs)
       .service(server::list_licenses)
   })
