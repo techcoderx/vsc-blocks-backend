@@ -3,7 +3,6 @@ use derive_more::derive::{ Display, Error };
 use tokio_postgres::types::Type;
 use serde::{ Serialize, Deserialize };
 use serde_json;
-use reqwest;
 use log::error;
 use std::fmt;
 use crate::db::DbPool;
@@ -69,8 +68,10 @@ struct ReqVerifyNew {
 async fn verify_new(req_data: web::Json<ReqVerifyNew>, ctx: web::Data<DbPool>) -> Result<HttpResponse, RespErr> {
   let db = ctx.get_ref().clone();
   let ct_req_method = config.vsc_haf_url.clone() + "/get_contract_by_id?id=" + &req_data.address;
-  let ct_det = reqwest
-    ::get(ct_req_method.as_str()).await
+  let ct_det = ctx
+    .get_http_client()
+    .get(ct_req_method.as_str())
+    .send().await
     .map_err(|_| RespErr::VscHafErr)?
     .json::<vsc_types::ContractById>().await
     .map_err(|_| RespErr::VscHafErr)?;

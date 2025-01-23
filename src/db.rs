@@ -2,6 +2,7 @@ use deadpool_postgres::{ Config, CreatePoolError, Manager, ManagerConfig, Recycl
 use deadpool::managed::{ Pool, Object };
 use tokio_postgres::{ types::ToSql, NoTls, Row, types::Type };
 use sql_minifier::macros::load_sql;
+use reqwest;
 use std::{ fmt, error };
 use log::info;
 use crate::config;
@@ -24,6 +25,7 @@ impl fmt::Display for DbError {
 #[derive(Clone)]
 pub struct DbPool {
   pool: Pool<Manager>,
+  http_client: reqwest::Client,
 }
 
 impl DbPool {
@@ -34,12 +36,17 @@ impl DbPool {
       recycling_method: RecyclingMethod::Fast,
     });
     let pool = cfg.create_pool(Some(Runtime::Tokio1), NoTls)?;
-    Ok(Self { pool })
+    let http_client = reqwest::Client::new();
+    Ok(Self { pool, http_client })
   }
 
   async fn get_client(&self) -> Result<Object<Manager>, DbError> {
     let c = self.pool.get().await.map_err(|e| DbError { message: e.to_string() })?;
     Ok(c)
+  }
+
+  pub fn get_http_client(&self) -> reqwest::Client {
+    self.http_client.clone()
   }
 
   pub async fn setup(&self) -> Result<(), DbError> {
