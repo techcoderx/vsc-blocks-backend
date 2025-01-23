@@ -16,6 +16,9 @@ enum RespErr {
     msg: String,
   },
   #[display("Failed to query VSC-HAF backend")] VscHafErr,
+  #[display("{msg}")] BadRequest {
+    msg: String,
+  },
 }
 
 impl fmt::Debug for RespErr {
@@ -23,6 +26,7 @@ impl fmt::Debug for RespErr {
     match self {
       RespErr::DbErr { msg } => write!(f, "{}", msg),
       RespErr::VscHafErr => Ok(()),
+      RespErr::BadRequest { .. } => Ok(()),
     }
   }
 }
@@ -42,6 +46,7 @@ impl actix_web::error::ResponseError for RespErr {
     match *self {
       RespErr::DbErr { .. } => StatusCode::INTERNAL_SERVER_ERROR,
       RespErr::VscHafErr => StatusCode::INTERNAL_SERVER_ERROR,
+      RespErr::BadRequest { .. } => StatusCode::BAD_REQUEST,
     }
   }
 }
@@ -70,17 +75,33 @@ async fn verify_new(req_data: web::Json<ReqVerifyNew>, ctx: web::Data<DbPool>) -
     .json::<vsc_types::ContractById>().await
     .map_err(|_| RespErr::VscHafErr)?;
   if ct_det.error.is_some() {
+    // as of now only error this api could return is contract not found with status code 200
     return Ok(HttpResponse::NotFound().json(serde_json::json!(ct_det)));
+  }
+  let can_verify: String = db
+    .query(
+      "SELECT vsc_cv.can_verify_new($1,$2,$3);",
+      &[
+        (&req_data.address, Type::VARCHAR),
+        (&req_data.license, Type::VARCHAR),
+        (&req_data.lang, Type::VARCHAR),
+      ]
+    ).await
+    .map_err(|e| RespErr::DbErr { msg: e.to_string() })?
+    [0].get(0);
+  if can_verify.len() > 0 {
+    return Err(RespErr::BadRequest { msg: can_verify });
   }
   db
     .query(
-      "SELECT vsc_cv.verify_new($1,$2,$3,0::SMALLINT,$4,$5,NULL)",
+      "SELECT vsc_cv.verify_new($1,$2,$3,0::SMALLINT,$4,$5,$6);",
       &[
         (&ct_det.contract_id, Type::VARCHAR),
         (&ct_det.code, Type::VARCHAR),
         (&req_data.username, Type::VARCHAR),
         (&req_data.license, Type::VARCHAR),
         (&req_data.lang, Type::VARCHAR),
+        (&req_data.dependencies, Type::JSONB),
       ]
     ).await
     .map_err(|e| RespErr::DbErr { msg: e.to_string() })?;
