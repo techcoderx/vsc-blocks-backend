@@ -1,6 +1,6 @@
 use deadpool_postgres::{ Config, CreatePoolError, Manager, ManagerConfig, RecyclingMethod, Runtime };
 use deadpool::managed::{ Pool, Object };
-use tokio_postgres::{ types::ToSql, NoTls, Row, types::Type };
+use tokio_postgres::{ types::{ ToSql, Type }, NoTls, Row };
 use sql_minifier::macros::load_sql;
 use reqwest;
 use std::{ fmt, error };
