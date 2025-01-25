@@ -1,14 +1,14 @@
 use deadpool_postgres::{ Config, CreatePoolError, Manager, ManagerConfig, RecyclingMethod, Runtime };
 use deadpool::managed::{ Pool, Object };
 use tokio_postgres::{ types::{ ToSql, Type }, NoTls, Row };
-use sql_minifier::macros::load_sql;
+use sql_minifier::minify_sql_file;
 use reqwest;
 use std::{ fmt, error };
 use log::info;
 use crate::config;
 
-const PSQL_CREATE_TABLES: &str = load_sql!("src/sql/create_tables.sql");
-const PSQL_FX: &str = load_sql!("src/sql/create_functions.sql");
+const PSQL_CREATE_TABLES: &str = minify_sql_file!("src/sql/create_tables.sql");
+const PSQL_FX: &str = minify_sql_file!("src/sql/create_functions.sql");
 
 #[derive(Debug)]
 pub struct DbError {
