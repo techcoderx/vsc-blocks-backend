@@ -42,3 +42,26 @@ BEGIN
     VALUES(_contract_addr, _bc_cid, _username, _status, _licence_id, _lang_id, _dependencies);
 END $$
 LANGUAGE plpgsql VOLATILE;
+
+-- Contract code upload
+CREATE OR REPLACE FUNCTION vsc_cv.can_upload_file(
+  _contract_addr VARCHAR,
+  _fname VARCHAR
+)
+RETURNS TEXT AS $$
+DECLARE
+  _status SMALLINT;
+BEGIN
+  IF _fname !~ '^[A-Za-z0-9._-]+$' OR length(_fname) > 50 THEN
+    RETURN 'File names must only contain A-Z, a-z, 0-9 and . _ - characters and be less than or equal to 50 characters.';
+  END IF;
+  SELECT status INTO _status FROM vsc_cv.contracts WHERE contract_addr = _contract_addr;
+  IF _status IS NULL THEN
+    RETURN 'Begin contract verification with /verify/new first.';
+  ELSIF _status <> 0 THEN
+    RETURN format('Status needs to be pending, it is currently %s.', (SELECT name FROM vsc_cv.status WHERE id = _status));
+  ELSE
+    RETURN '';
+  END IF;
+END $$
+LANGUAGE plpgsql VOLATILE;

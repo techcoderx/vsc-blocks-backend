@@ -33,6 +33,7 @@ async fn main() -> std::io::Result<()> {
       .app_data(web::Data::new(db_pool.clone()))
       .service(server::hello)
       .service(server::verify_new)
+      .service(server::upload_file)
       .service(server::list_langs)
       .service(server::list_licenses)
   })

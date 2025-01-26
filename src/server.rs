@@ -1,10 +1,11 @@
-use actix_web::{ http::{ header::ContentType, StatusCode }, get, post, web, HttpResponse, Responder };
+use actix_web::{ get, http::{ header::ContentType, StatusCode }, post, web, HttpRequest, HttpResponse, Responder };
+use actix_multipart::form::{ tempfile::TempFile, MultipartForm, text::Text };
 use derive_more::derive::{ Display, Error };
 use tokio_postgres::types::Type;
 use serde::{ Serialize, Deserialize };
 use serde_json;
-use log::error;
-use std::fmt;
+use log::{ error, debug };
+use std::{ fmt, io::Read };
 use crate::db::DbPool;
 use crate::vsc_types;
 use crate::config::config;
@@ -103,6 +104,68 @@ async fn verify_new(req_data: web::Json<ReqVerifyNew>, ctx: web::Data<DbPool>) -
         (&req_data.license, Type::VARCHAR),
         (&req_data.lang, Type::VARCHAR),
         (&req_data.dependencies, Type::JSONB),
+      ]
+    ).await
+    .map_err(|e| RespErr::DbErr { msg: e.to_string() })?;
+  Ok(HttpResponse::Ok().json(serde_json::json!({ "success": true })))
+}
+
+#[derive(Debug, MultipartForm)]
+struct VerifUploadForm {
+  #[multipart(limit = "1MB")]
+  file: TempFile,
+  contract_address: Text<String>,
+  filename: Text<String>,
+}
+
+#[post("/verify/upload")]
+async fn upload_file(
+  req: HttpRequest,
+  MultipartForm(mut form): MultipartForm<VerifUploadForm>,
+  ctx: web::Data<DbPool>
+) -> Result<HttpResponse, RespErr> {
+  if let Some(auth_header) = req.headers().get("Authorization") {
+    let auth_value = auth_header.to_str().unwrap_or("");
+    debug!("Authentication header: {}", auth_value);
+    debug!("Request query {}", req.query_string());
+    // TODO: authenticate user
+  }
+  debug!("Uploaded file {} with size: {}", form.file.file_name.unwrap(), form.file.size);
+  debug!("Contract address {}, new filename: {}", &form.contract_address.0, &form.filename.0);
+  if form.file.size > 1024 * 1024 {
+    return Err(RespErr::BadRequest { msg: String::from("Uploaded file size exceeds 1MB limit") });
+  }
+  let mut contents = String::new();
+  match form.file.file.read_to_string(&mut contents) {
+    Ok(_) => (),
+    Err(e) => {
+      error!("Failed to read uploaded file: {}", e.to_string());
+      return Err(RespErr::BadRequest {
+        msg: String::from("Failed to process uploaded file, most likely file is not in UTF-8 format."),
+      });
+    }
+  }
+  let db = ctx.get_ref().clone();
+  let can_upload: String = db
+    .query(
+      "SELECT vsc_cv.can_upload_file($1,$2);",
+      &[
+        (&form.contract_address.0, Type::VARCHAR),
+        (&form.filename.0, Type::VARCHAR),
+      ]
+    ).await
+    .map_err(|e| RespErr::DbErr { msg: e.to_string() })?
+    [0].get(0);
+  if can_upload.len() > 0 {
+    return Err(RespErr::BadRequest { msg: can_upload });
+  }
+  db
+    .query(
+      "INSERT INTO vsc_cv.source_code(contract_addr,fname,content) VALUES($1,$2,$3) ON CONFLICT(contract_addr,fname) DO UPDATE SET content=$3;",
+      &[
+        (&form.contract_address.0, Type::VARCHAR),
+        (&form.filename.0, Type::VARCHAR),
+        (&contents, Type::VARCHAR),
       ]
     ).await
     .map_err(|e| RespErr::DbErr { msg: e.to_string() })?;
