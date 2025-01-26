@@ -8,12 +8,16 @@ CREATE OR REPLACE FUNCTION vsc_cv.can_verify_new(
   _lang VARCHAR
 )
 RETURNS TEXT AS $$
+DECLARE
+  _status SMALLINT;
 BEGIN
   IF (SELECT NOT EXISTS (SELECT 1 FROM vsc_cv.licenses l WHERE l.name = _license)) THEN
     RETURN format('License %s is currently unsupported.', _license);
   ELSIF (SELECT NOT EXISTS (SELECT 1 FROM vsc_cv.languages l WHERE l.name = _lang)) THEN
     RETURN format('Language %s is currently unsupported.', _lang);
-  ELSIF (SELECT EXISTS (SELECT 1 FROM vsc_cv.contracts c WHERE c.contract_addr = _contract_addr)) THEN
+  END IF;
+  SELECT status INTO _status FROM vsc_cv.contracts c WHERE c.contract_addr = _contract_addr;
+  IF _status <> 4 THEN
     RETURN 'Contract is already verified or being verified.';
   ELSE
     RETURN '';
@@ -32,9 +36,14 @@ CREATE OR REPLACE FUNCTION vsc_cv.verify_new(
 )
 RETURNS void AS $$
 DECLARE
+  _e TEXT;
   _licence_id SMALLINT;
   _lang_id SMALLINT;
 BEGIN
+  SELECT vsc_cv.can_verify_new(_contract_addr, _license, _lang) INTO _e;
+  IF length(_e) > 0 THEN
+    RAISE EXCEPTION '%s', _e;
+  END IF;
   SELECT id INTO _licence_id FROM vsc_cv.licenses l WHERE l.name = _license;
   SELECT id INTO _lang_id FROM vsc_cv.languages l WHERE l.name = _lang;
 
