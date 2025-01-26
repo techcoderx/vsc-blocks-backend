@@ -96,7 +96,7 @@ async fn verify_new(req_data: web::Json<ReqVerifyNew>, ctx: web::Data<DbPool>) -
   }
   db
     .query(
-      "SELECT vsc_cv.verify_new($1,$2,$3,0::SMALLINT,$4,$5,$6);",
+      "INSERT INTO vsc_cv.contracts(contract_addr,bytecode_cid,hive_username,status,license,lang,dependencies) VALUES($1,$2,$3,0::SMALLINT,(SELECT id FROM vsc_cv.licenses WHERE name=$4),(SELECT id FROM vsc_cv.languages WHERE name=$5),$6);",
       &[
         (&ct_det.contract_id, Type::VARCHAR),
         (&ct_det.code, Type::VARCHAR),
