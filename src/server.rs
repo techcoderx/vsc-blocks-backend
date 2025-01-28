@@ -94,6 +94,10 @@ async fn verify_new(req_data: web::Json<ReqVerifyNew>, ctx: web::Data<DbPool>) -
   if can_verify.len() > 0 {
     return Err(RespErr::BadRequest { msg: can_verify });
   }
+  // clear already uploaded source codes when the previous ones failed verification
+  db
+    .query("DELETE FROM vsc_cv.source_code WHERE contract_addr=$1;", &[(&ct_det.contract_id, Type::VARCHAR)]).await
+    .map_err(|e| RespErr::DbErr { msg: e.to_string() })?;
   db
     .query(
       "INSERT INTO vsc_cv.contracts(contract_addr,bytecode_cid,hive_username,status,license,lang,dependencies) VALUES($1,$2,$3,0::SMALLINT,(SELECT id FROM vsc_cv.licenses WHERE name=$4),(SELECT id FROM vsc_cv.languages WHERE name=$5),$6);",
@@ -168,6 +172,50 @@ async fn upload_file(
         (&contents, Type::VARCHAR),
       ]
     ).await
+    .map_err(|e| RespErr::DbErr { msg: e.to_string() })?;
+  Ok(HttpResponse::Ok().json(serde_json::json!({ "success": true })))
+}
+
+#[derive(Deserialize)]
+struct ReqVerifyCompl {
+  address: String,
+}
+
+#[post("/verify/complete")]
+async fn upload_complete(
+  req: HttpRequest,
+  req_data: web::Json<ReqVerifyCompl>,
+  ctx: web::Data<DbPool>
+) -> Result<HttpResponse, RespErr> {
+  if let Some(auth_header) = req.headers().get("Authorization") {
+    let auth_value = auth_header.to_str().unwrap_or("");
+    debug!("Authentication header: {}", auth_value);
+    debug!("Request query {}", req.query_string());
+    // TODO: authenticate user
+  }
+  let db = ctx.get_ref().clone();
+  let contr = db
+    .query(
+      "SELECT hive_username, status FROM vsc_cv.contracts WHERE contract_addr=$1;",
+      &[(&req_data.address, Type::VARCHAR)]
+    ).await
+    .map_err(|e| RespErr::DbErr { msg: e.to_string() })?;
+  if contr.len() < 1 {
+    return Err(RespErr::BadRequest { msg: String::from("Contract does not exist") });
+  }
+  let status: i16 = contr[0].get(1);
+  if status != 0 {
+    return Err(RespErr::BadRequest { msg: String::from("Status is currently not pending upload") });
+  }
+  let file_count: i64 = db
+    .query("SELECT COUNT(*) FROM vsc_cv.source_code WHERE contract_addr=$1;", &[(&req_data.address, Type::VARCHAR)]).await
+    .map_err(|e| RespErr::DbErr { msg: e.to_string() })?
+    [0].get(0);
+  if file_count < 1 {
+    return Err(RespErr::BadRequest { msg: String::from("No source files were uploaded for this contract") });
+  }
+  db
+    .query("UPDATE vsc_cv.contracts SET status=1::SMALLINT WHERE contract_addr=$1;", &[(&req_data.address, Type::VARCHAR)]).await
     .map_err(|e| RespErr::DbErr { msg: e.to_string() })?;
   Ok(HttpResponse::Ok().json(serde_json::json!({ "success": true })))
 }

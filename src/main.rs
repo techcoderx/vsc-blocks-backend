@@ -34,6 +34,7 @@ async fn main() -> std::io::Result<()> {
       .service(server::hello)
       .service(server::verify_new)
       .service(server::upload_file)
+      .service(server::upload_complete)
       .service(server::list_langs)
       .service(server::list_licenses)
   })
