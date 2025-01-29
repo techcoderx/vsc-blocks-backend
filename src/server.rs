@@ -4,6 +4,7 @@ use derive_more::derive::{ Display, Error };
 use tokio_postgres::types::Type;
 use serde::{ Serialize, Deserialize };
 use serde_json;
+use chrono::Utc;
 use log::{ error, debug };
 use std::{ fmt, io::Read };
 use crate::db::DbPool;
@@ -104,11 +105,12 @@ async fn verify_new(
     .map_err(|e| RespErr::DbErr { msg: e.to_string() })?;
   db
     .query(
-      "INSERT INTO vsc_cv.contracts(contract_addr,bytecode_cid,hive_username,status,license,lang,dependencies) VALUES($1,$2,$3,0::SMALLINT,(SELECT id FROM vsc_cv.licenses WHERE name=$4),(SELECT id FROM vsc_cv.languages WHERE name=$5),$6);",
+      "INSERT INTO vsc_cv.contracts(contract_addr,bytecode_cid,hive_username,request_ts,status,license,lang,dependencies) VALUES($1,$2,$3,$4,0::SMALLINT,(SELECT id FROM vsc_cv.licenses WHERE name=$5),(SELECT id FROM vsc_cv.languages WHERE name=$6),$7);",
       &[
         (&ct_det.contract_id, Type::VARCHAR),
         (&ct_det.code, Type::VARCHAR),
         (&req_data.username, Type::VARCHAR),
+        (&Utc::now().naive_utc(), Type::TIMESTAMP),
         (&req_data.license, Type::VARCHAR),
         (&req_data.lang, Type::VARCHAR),
         (&req_data.dependencies, Type::JSONB),

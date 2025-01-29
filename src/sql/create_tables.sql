@@ -19,6 +19,7 @@ CREATE TABLE vsc_cv.contracts(
   contract_addr VARCHAR(68) PRIMARY KEY,
   bytecode_cid VARCHAR(59) NOT NULL,
   hive_username VARCHAR(16) NOT NULL,
+  request_ts TIMESTAMP NOT NULL,
   verified_ts TIMESTAMP,
   status SMALLINT NOT NULL REFERENCES vsc_cv.status(id),
   exports jsonb,
