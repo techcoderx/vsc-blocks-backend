@@ -58,17 +58,21 @@ async fn hello() -> impl Responder {
 
 #[derive(Serialize, Deserialize)]
 struct ReqVerifyNew {
-  address: String,
   username: String,
   license: String,
   lang: String,
   dependencies: serde_json::Value,
 }
 
-#[post("/verify/new")]
-async fn verify_new(req_data: web::Json<ReqVerifyNew>, ctx: web::Data<DbPool>) -> Result<HttpResponse, RespErr> {
+#[post("/verify/{address}/new")]
+async fn verify_new(
+  path: web::Path<String>,
+  req_data: web::Json<ReqVerifyNew>,
+  ctx: web::Data<DbPool>
+) -> Result<HttpResponse, RespErr> {
+  let address = path.into_inner();
   let db = ctx.get_ref().clone();
-  let ct_req_method = config.vsc_haf_url.clone() + "/get_contract_by_id?id=" + &req_data.address;
+  let ct_req_method = config.vsc_haf_url.clone() + "/get_contract_by_id?id=" + &address;
   let ct_det = ctx
     .get_http_client()
     .get(ct_req_method.as_str())
@@ -84,7 +88,7 @@ async fn verify_new(req_data: web::Json<ReqVerifyNew>, ctx: web::Data<DbPool>) -
     .query(
       "SELECT vsc_cv.can_verify_new($1,$2,$3);",
       &[
-        (&req_data.address, Type::VARCHAR),
+        (&address, Type::VARCHAR),
         (&req_data.license, Type::VARCHAR),
         (&req_data.lang, Type::VARCHAR),
       ]
@@ -118,16 +122,17 @@ async fn verify_new(req_data: web::Json<ReqVerifyNew>, ctx: web::Data<DbPool>) -
 struct VerifUploadForm {
   #[multipart(limit = "1MB")]
   file: TempFile,
-  contract_address: Text<String>,
   filename: Text<String>,
 }
 
-#[post("/verify/upload")]
+#[post("/verify/{address}/upload")]
 async fn upload_file(
+  path: web::Path<String>,
   req: HttpRequest,
   MultipartForm(mut form): MultipartForm<VerifUploadForm>,
   ctx: web::Data<DbPool>
 ) -> Result<HttpResponse, RespErr> {
+  let address = path.into_inner();
   if let Some(auth_header) = req.headers().get("Authorization") {
     let auth_value = auth_header.to_str().unwrap_or("");
     debug!("Authentication header: {}", auth_value);
@@ -135,7 +140,7 @@ async fn upload_file(
     // TODO: authenticate user
   }
   debug!("Uploaded file {} with size: {}", form.file.file_name.unwrap(), form.file.size);
-  debug!("Contract address {}, new filename: {}", &form.contract_address.0, &form.filename.0);
+  debug!("Contract address {}, new filename: {}", &address, &form.filename.0);
   if form.file.size > 1024 * 1024 {
     return Err(RespErr::BadRequest { msg: String::from("Uploaded file size exceeds 1MB limit") });
   }
@@ -154,7 +159,7 @@ async fn upload_file(
     .query(
       "SELECT vsc_cv.can_upload_file($1,$2);",
       &[
-        (&form.contract_address.0, Type::VARCHAR),
+        (&address, Type::VARCHAR),
         (&form.filename.0, Type::VARCHAR),
       ]
     ).await
@@ -167,7 +172,7 @@ async fn upload_file(
     .query(
       "INSERT INTO vsc_cv.source_code(contract_addr,fname,content) VALUES($1,$2,$3) ON CONFLICT(contract_addr,fname) DO UPDATE SET content=$3;",
       &[
-        (&form.contract_address.0, Type::VARCHAR),
+        (&address, Type::VARCHAR),
         (&form.filename.0, Type::VARCHAR),
         (&contents, Type::VARCHAR),
       ]
@@ -176,17 +181,9 @@ async fn upload_file(
   Ok(HttpResponse::Ok().json(serde_json::json!({ "success": true })))
 }
 
-#[derive(Deserialize)]
-struct ReqVerifyCompl {
-  address: String,
-}
-
-#[post("/verify/complete")]
-async fn upload_complete(
-  req: HttpRequest,
-  req_data: web::Json<ReqVerifyCompl>,
-  ctx: web::Data<DbPool>
-) -> Result<HttpResponse, RespErr> {
+#[post("/verify/{address}/complete")]
+async fn upload_complete(path: web::Path<String>, req: HttpRequest, ctx: web::Data<DbPool>) -> Result<HttpResponse, RespErr> {
+  let address = path.into_inner();
   if let Some(auth_header) = req.headers().get("Authorization") {
     let auth_value = auth_header.to_str().unwrap_or("");
     debug!("Authentication header: {}", auth_value);
@@ -195,10 +192,7 @@ async fn upload_complete(
   }
   let db = ctx.get_ref().clone();
   let contr = db
-    .query(
-      "SELECT hive_username, status FROM vsc_cv.contracts WHERE contract_addr=$1;",
-      &[(&req_data.address, Type::VARCHAR)]
-    ).await
+    .query("SELECT hive_username, status FROM vsc_cv.contracts WHERE contract_addr=$1;", &[(&address, Type::VARCHAR)]).await
     .map_err(|e| RespErr::DbErr { msg: e.to_string() })?;
   if contr.len() < 1 {
     return Err(RespErr::BadRequest { msg: String::from("Contract does not exist") });
@@ -208,14 +202,14 @@ async fn upload_complete(
     return Err(RespErr::BadRequest { msg: String::from("Status is currently not pending upload") });
   }
   let file_count: i64 = db
-    .query("SELECT COUNT(*) FROM vsc_cv.source_code WHERE contract_addr=$1;", &[(&req_data.address, Type::VARCHAR)]).await
+    .query("SELECT COUNT(*) FROM vsc_cv.source_code WHERE contract_addr=$1;", &[(&address, Type::VARCHAR)]).await
     .map_err(|e| RespErr::DbErr { msg: e.to_string() })?
     [0].get(0);
   if file_count < 1 {
     return Err(RespErr::BadRequest { msg: String::from("No source files were uploaded for this contract") });
   }
   db
-    .query("UPDATE vsc_cv.contracts SET status=1::SMALLINT WHERE contract_addr=$1;", &[(&req_data.address, Type::VARCHAR)]).await
+    .query("UPDATE vsc_cv.contracts SET status=1::SMALLINT WHERE contract_addr=$1;", &[(&address, Type::VARCHAR)]).await
     .map_err(|e| RespErr::DbErr { msg: e.to_string() })?;
   Ok(HttpResponse::Ok().json(serde_json::json!({ "success": true })))
 }
