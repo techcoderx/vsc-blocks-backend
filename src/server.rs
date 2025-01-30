@@ -7,7 +7,7 @@ use serde_json;
 use semver::VersionReq;
 use chrono::Utc;
 use log::{ error, debug };
-use std::{ fmt::{ self }, io::Read };
+use std::{ fmt, io::Read };
 use crate::constants::{ * };
 use crate::db::DbPool;
 use crate::vsc_types;
