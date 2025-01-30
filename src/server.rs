@@ -4,9 +4,11 @@ use derive_more::derive::{ Display, Error };
 use tokio_postgres::types::Type;
 use serde::{ Serialize, Deserialize };
 use serde_json;
+use semver::VersionReq;
 use chrono::Utc;
 use log::{ error, debug };
-use std::{ fmt, io::Read };
+use std::{ fmt::{ self }, io::Read };
+use crate::constants::{ * };
 use crate::db::DbPool;
 use crate::vsc_types;
 use crate::config::config;
@@ -98,6 +100,43 @@ async fn verify_new(
     [0].get(0);
   if can_verify.len() > 0 {
     return Err(RespErr::BadRequest { msg: can_verify });
+  }
+  // check required dependencies
+  match req_data.lang.as_str() {
+    "assemblyscript" => {
+      if !req_data.dependencies.is_object() {
+        return Err(RespErr::BadRequest { msg: String::from("Dependencies must be an object") });
+      }
+      let test_utils = req_data.dependencies.get(ASC_TEST_UTILS_NAME);
+      let sdk = req_data.dependencies.get(ASC_SDK_NAME);
+      let assemblyscript = req_data.dependencies.get(ASC_NAME);
+      let assemblyscript_json = req_data.dependencies.get(ASC_JSON_NAME);
+      if test_utils.is_none() || sdk.is_none() || assemblyscript.is_none() || assemblyscript_json.is_none() {
+        return Err(RespErr::BadRequest {
+          msg: format!(
+            "The following dependencies are required: {}, {}, {}, {}",
+            ASC_TEST_UTILS_NAME,
+            ASC_SDK_NAME,
+            ASC_NAME,
+            ASC_JSON_NAME
+          ),
+        });
+      }
+      if let serde_json::Value::Object(map) = &req_data.dependencies {
+        // Iterate over the keys and values in the map
+        for (key, val) in map.iter() {
+          if !val.is_string() {
+            return Err(RespErr::BadRequest { msg: String::from("Dependency versions must be strings") });
+          }
+          VersionReq::parse(val.as_str().unwrap()).map_err(|e| RespErr::BadRequest {
+            msg: format!("Invalid semver for dependency {}: {}", key, e.to_string()),
+          })?;
+        }
+      }
+    }
+    _ => {
+      return Err(RespErr::BadRequest { msg: String::from("Language is currently unsupported") });
+    }
   }
   // clear already uploaded source codes when the previous ones failed verification
   db

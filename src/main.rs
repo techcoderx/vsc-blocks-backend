@@ -3,6 +3,7 @@ use env_logger;
 use std::process;
 use log::error;
 mod config;
+mod constants;
 mod db;
 mod server;
 mod vsc_types;
