@@ -7,8 +7,8 @@ edition = "2021"
 actix-multipart = "0.7.2"
 actix-web = "4.9.0"
 chrono = "0.4.39"
-clap = { version = "4.5.27", features = ["derive"] }
-deadpool = "0.12.1"
+clap = { version = "4.5.29", features = ["derive"] }
+deadpool = "0.12.2"
 deadpool-postgres = "0.14.1"
 derive_more = { version = "1.0.0", features = ["display", "error"] }
 env_logger = "0.11.6"
@@ -18,11 +18,11 @@ reqwest = { version = "0.12.12", features = ["json"] }
 semver = "1.0.25"
 serde = { version = "1.0.217", features = ["derive"] }
 serde_derive = "1.0.217"
-serde_json = "1.0.137"
+serde_json = "1.0.138"
 sql_minifier = { path = "lib/sql_minifier" }
 tokio = "1.43.0"
-tokio-postgres = { version = "0.7.12", features = [
+tokio-postgres = { version = "0.7.13", features = [
   "with-chrono-0_4",
   "with-serde_json-1",
 ] }
-toml = "0.8.19"
+toml = "0.8.20"
