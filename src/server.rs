@@ -2,6 +2,7 @@ use actix_web::{ get, http::{ header::ContentType, StatusCode }, post, web, Http
 use actix_multipart::form::{ tempfile::TempFile, MultipartForm, text::Text };
 use derive_more::derive::{ Display, Error };
 use tokio_postgres::types::Type;
+use reqwest;
 use serde::{ Serialize, Deserialize };
 use serde_json;
 use semver::VersionReq;
@@ -10,6 +11,7 @@ use log::{ error, debug };
 use std::{ fmt, io::Read };
 use crate::constants::{ * };
 use crate::db::DbPool;
+use crate::compiler::Compiler;
 use crate::vsc_types;
 use crate::config::config;
 
@@ -54,6 +56,13 @@ impl actix_web::error::ResponseError for RespErr {
   }
 }
 
+#[derive(Clone)]
+pub struct Context {
+  pub db: DbPool,
+  pub compiler: Compiler,
+  pub http_client: reqwest::Client,
+}
+
 #[get("/")]
 async fn hello() -> impl Responder {
   HttpResponse::Ok().body("Hello world!")
@@ -71,13 +80,12 @@ struct ReqVerifyNew {
 async fn verify_new(
   path: web::Path<String>,
   req_data: web::Json<ReqVerifyNew>,
-  ctx: web::Data<DbPool>
+  ctx: web::Data<Context>
 ) -> Result<HttpResponse, RespErr> {
   let address = path.into_inner();
-  let db = ctx.get_ref().clone();
+  let db = ctx.get_ref().clone().db;
   let ct_req_method = config.vsc_haf_url.clone() + "/get_contract_by_id?id=" + &address;
-  let ct_det = ctx
-    .get_http_client()
+  let ct_det = ctx.http_client
     .get(ct_req_method.as_str())
     .send().await
     .map_err(|_| RespErr::VscHafErr)?
@@ -171,7 +179,7 @@ async fn upload_file(
   path: web::Path<String>,
   req: HttpRequest,
   MultipartForm(mut form): MultipartForm<VerifUploadForm>,
-  ctx: web::Data<DbPool>
+  ctx: web::Data<Context>
 ) -> Result<HttpResponse, RespErr> {
   let address = path.into_inner();
   if let Some(auth_header) = req.headers().get("Authorization") {
@@ -195,7 +203,7 @@ async fn upload_file(
       });
     }
   }
-  let db = ctx.get_ref().clone();
+  let db = ctx.get_ref().clone().db;
   let can_upload: String = db
     .query(
       "SELECT vsc_cv.can_upload_file($1,$2);",
@@ -223,7 +231,7 @@ async fn upload_file(
 }
 
 #[post("/verify/{address}/complete")]
-async fn upload_complete(path: web::Path<String>, req: HttpRequest, ctx: web::Data<DbPool>) -> Result<HttpResponse, RespErr> {
+async fn upload_complete(path: web::Path<String>, req: HttpRequest, ctx: web::Data<Context>) -> Result<HttpResponse, RespErr> {
   let address = path.into_inner();
   if let Some(auth_header) = req.headers().get("Authorization") {
     let auth_value = auth_header.to_str().unwrap_or("");
@@ -231,7 +239,7 @@ async fn upload_complete(path: web::Path<String>, req: HttpRequest, ctx: web::Da
     debug!("Request query {}", req.query_string());
     // TODO: authenticate user
   }
-  let db = ctx.get_ref().clone();
+  let db = ctx.get_ref().clone().db;
   let contr = db
     .query("SELECT hive_username, status FROM vsc_cv.contracts WHERE contract_addr=$1;", &[(&address, Type::VARCHAR)]).await
     .map_err(|e| RespErr::DbErr { msg: e.to_string() })?;
@@ -252,24 +260,28 @@ async fn upload_complete(path: web::Path<String>, req: HttpRequest, ctx: web::Da
   db
     .query("UPDATE vsc_cv.contracts SET status=1::SMALLINT WHERE contract_addr=$1;", &[(&address, Type::VARCHAR)]).await
     .map_err(|e| RespErr::DbErr { msg: e.to_string() })?;
+  ctx.compiler.notify();
+  debug!("Complete");
   Ok(HttpResponse::Ok().json(serde_json::json!({ "success": true })))
 }
 
 #[get("/languages")]
-async fn list_langs(ctx: web::Data<DbPool>) -> Result<HttpResponse, RespErr> {
-  let db = ctx.get_ref().clone();
-  let rows = db
-    .query("SELECT jsonb_agg(name) FROM vsc_cv.languages;", &[]).await
+async fn list_langs(ctx: web::Data<Context>) -> Result<HttpResponse, RespErr> {
+  let rows = ctx
+    .get_ref()
+    .clone()
+    .db.query("SELECT jsonb_agg(name) FROM vsc_cv.languages;", &[]).await
     .map_err(|e| RespErr::DbErr { msg: e.to_string() })?;
   let result: serde_json::Value = rows[0].get(0);
   Ok(HttpResponse::Ok().json(result))
 }
 
 #[get("/licenses")]
-async fn list_licenses(ctx: web::Data<DbPool>) -> Result<HttpResponse, RespErr> {
-  let db = ctx.get_ref().clone();
-  let rows = db
-    .query("SELECT jsonb_agg(name) FROM vsc_cv.licenses;", &[]).await
+async fn list_licenses(ctx: web::Data<Context>) -> Result<HttpResponse, RespErr> {
+  let rows = ctx
+    .get_ref()
+    .clone()
+    .db.query("SELECT jsonb_agg(name) FROM vsc_cv.licenses;", &[]).await
     .map_err(|e| RespErr::DbErr { msg: e.to_string() })?;
   let result: serde_json::Value = rows[0].get(0);
   Ok(HttpResponse::Ok().json(result))

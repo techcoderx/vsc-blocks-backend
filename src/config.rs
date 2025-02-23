@@ -18,11 +18,18 @@ pub struct ServerConfig {
 }
 
 #[derive(Deserialize)]
+pub struct ASCompilerConf {
+  pub image: String,
+  pub src_dir: String,
+}
+
+#[derive(Deserialize)]
 pub struct TomlConfig {
   pub log_level: Option<String>,
   pub psql_url: String,
   pub vsc_haf_url: String,
   pub server: ServerConfig,
+  pub ascompiler: ASCompilerConf,
 }
 
 impl TomlConfig {

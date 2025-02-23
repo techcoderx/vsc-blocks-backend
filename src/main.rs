@@ -1,4 +1,5 @@
 use actix_web::{ web, App, HttpServer };
+use reqwest;
 use env_logger;
 use std::process;
 use log::error;
@@ -7,6 +8,7 @@ mod constants;
 mod db;
 mod server;
 mod vsc_types;
+mod compiler;
 
 #[actix_web::main]
 async fn main() -> std::io::Result<()> {
@@ -29,9 +31,12 @@ async fn main() -> std::io::Result<()> {
       process::exit(1);
     }
   }
+  let compiler = compiler::Compiler::init(&db_pool);
+  compiler.notify();
+  let server_ctx = server::Context { db: db_pool, compiler, http_client: reqwest::Client::new() };
   HttpServer::new(move || {
     App::new()
-      .app_data(web::Data::new(db_pool.clone()))
+      .app_data(web::Data::new(server_ctx.clone()))
       .service(server::hello)
       .service(server::verify_new)
       .service(server::upload_file)
