@@ -2,6 +2,7 @@ node_modules
 src
 build
 package.json
+.pnpm-store
 
 # Lock files
 pnpm-lock.yaml
