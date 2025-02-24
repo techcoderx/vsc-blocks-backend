@@ -44,6 +44,8 @@ async fn main() -> std::io::Result<()> {
       .service(server::list_langs)
       .service(server::list_licenses)
       .service(server::contract_info)
+      .service(server::contract_files_ls)
+      .service(server::contract_files_cat)
   })
     .bind((config.server.address.as_str(), config.server.port))?
     .run().await

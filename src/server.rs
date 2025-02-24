@@ -316,3 +316,37 @@ async fn contract_info(path: web::Path<String>, ctx: web::Data<Context>) -> Resu
   });
   Ok(HttpResponse::Ok().json(result))
 }
+
+#[get("/contract/{address}/files/ls")]
+async fn contract_files_ls(path: web::Path<String>, ctx: web::Data<Context>) -> Result<HttpResponse, RespErr> {
+  let addr = path.into_inner();
+  let files = ctx
+    .get_ref()
+    .clone()
+    .db.query(
+      "SELECT jsonb_agg(fname) FROM vsc_cv.source_code WHERE contract_addr=$1 AND is_lockfile=false;",
+      &[(&addr, Type::VARCHAR)]
+    ).await
+    .map_err(|e| RespErr::DbErr { msg: e.to_string() })?;
+  Ok(HttpResponse::Ok().json(files[0].get::<usize, Value>(0)))
+}
+
+#[get("/contract/{address}/files/cat/{filename}")]
+async fn contract_files_cat(path: web::Path<(String, String)>, ctx: web::Data<Context>) -> Result<HttpResponse, RespErr> {
+  let (addr, filename) = path.into_inner();
+  let files = ctx
+    .get_ref()
+    .clone()
+    .db.query(
+      "SELECT content FROM vsc_cv.source_code WHERE contract_addr=$1 AND fname=$2;",
+      &[
+        (&addr, Type::VARCHAR),
+        (&filename, Type::VARCHAR),
+      ]
+    ).await
+    .map_err(|e| RespErr::DbErr { msg: e.to_string() })?;
+  if files.len() == 0 {
+    return Ok(HttpResponse::NotFound().body("Error 404 file not found"));
+  }
+  Ok(HttpResponse::Ok().body(files[0].get::<usize, String>(0)))
+}
