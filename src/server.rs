@@ -4,9 +4,9 @@ use derive_more::derive::{ Display, Error };
 use tokio_postgres::types::Type;
 use reqwest;
 use serde::{ Serialize, Deserialize };
-use serde_json;
+use serde_json::{ json, Value };
 use semver::VersionReq;
-use chrono::Utc;
+use chrono::{ NaiveDateTime, Utc };
 use log::{ error, debug };
 use std::{ fmt, io::Read };
 use crate::constants::{ * };
@@ -44,7 +44,7 @@ impl actix_web::error::ResponseError for RespErr {
     }
     HttpResponse::build(self.status_code())
       .insert_header(ContentType::json())
-      .json(serde_json::json!({ "error": self.to_string() }))
+      .json(json!({ "error": self.to_string() }))
   }
 
   fn status_code(&self) -> StatusCode {
@@ -73,7 +73,7 @@ struct ReqVerifyNew {
   username: String,
   license: String,
   lang: String,
-  dependencies: serde_json::Value,
+  dependencies: Value,
 }
 
 #[post("/verify/{address}/new")]
@@ -93,7 +93,7 @@ async fn verify_new(
     .map_err(|_| RespErr::VscHafErr)?;
   if ct_det.error.is_some() {
     // as of now only error this api could return is contract not found with status code 200
-    return Ok(HttpResponse::NotFound().json(serde_json::json!(ct_det)));
+    return Ok(HttpResponse::NotFound().json(json!(ct_det)));
   }
   let can_verify: String = db
     .query(
@@ -130,7 +130,7 @@ async fn verify_new(
           ),
         });
       }
-      if let serde_json::Value::Object(map) = &req_data.dependencies {
+      if let Value::Object(map) = &req_data.dependencies {
         // Iterate over the keys and values in the map
         for (key, val) in map.iter() {
           if !val.is_string() {
@@ -164,7 +164,7 @@ async fn verify_new(
       ]
     ).await
     .map_err(|e| RespErr::DbErr { msg: e.to_string() })?;
-  Ok(HttpResponse::Ok().json(serde_json::json!({ "success": true })))
+  Ok(HttpResponse::Ok().json(json!({ "success": true })))
 }
 
 #[derive(Debug, MultipartForm)]
@@ -227,7 +227,7 @@ async fn upload_file(
       ]
     ).await
     .map_err(|e| RespErr::DbErr { msg: e.to_string() })?;
-  Ok(HttpResponse::Ok().json(serde_json::json!({ "success": true })))
+  Ok(HttpResponse::Ok().json(json!({ "success": true })))
 }
 
 #[post("/verify/{address}/complete")]
@@ -262,7 +262,7 @@ async fn upload_complete(path: web::Path<String>, req: HttpRequest, ctx: web::Da
     .map_err(|e| RespErr::DbErr { msg: e.to_string() })?;
   ctx.compiler.notify();
   debug!("Complete");
-  Ok(HttpResponse::Ok().json(serde_json::json!({ "success": true })))
+  Ok(HttpResponse::Ok().json(json!({ "success": true })))
 }
 
 #[get("/languages")]
@@ -272,7 +272,7 @@ async fn list_langs(ctx: web::Data<Context>) -> Result<HttpResponse, RespErr> {
     .clone()
     .db.query("SELECT jsonb_agg(name) FROM vsc_cv.languages;", &[]).await
     .map_err(|e| RespErr::DbErr { msg: e.to_string() })?;
-  let result: serde_json::Value = rows[0].get(0);
+  let result: Value = rows[0].get(0);
   Ok(HttpResponse::Ok().json(result))
 }
 
@@ -283,6 +283,36 @@ async fn list_licenses(ctx: web::Data<Context>) -> Result<HttpResponse, RespErr>
     .clone()
     .db.query("SELECT jsonb_agg(name) FROM vsc_cv.licenses;", &[]).await
     .map_err(|e| RespErr::DbErr { msg: e.to_string() })?;
-  let result: serde_json::Value = rows[0].get(0);
+  let result: Value = rows[0].get(0);
+  Ok(HttpResponse::Ok().json(result))
+}
+
+#[get("/contract/{address}")]
+async fn contract_info(path: web::Path<String>, ctx: web::Data<Context>) -> Result<HttpResponse, RespErr> {
+  let addr = path.into_inner();
+  let contract = ctx
+    .get_ref()
+    .clone()
+    .db.query(
+      "SELECT c.bytecode_cid, c.hive_username, c.request_ts, c.verified_ts, s.name, c.exports, lc.name, lg.name, c.dependencies FROM vsc_cv.contracts c JOIN vsc_cv.status s ON s.id = c.status JOIN vsc_cv.licenses lc ON lc.id = c.license JOIN vsc_cv.languages lg ON lg.id = c.lang WHERE contract_addr=$1;",
+      &[(&addr, Type::VARCHAR)]
+    ).await
+    .map_err(|e| RespErr::DbErr { msg: e.to_string() })?;
+  if contract.len() == 0 {
+    return Ok(HttpResponse::NotFound().json(json!({"error": "contract not found"})));
+  }
+  let result =
+    json!({
+    "address": &addr,
+    "code": contract[0].get::<usize, &str>(0),
+    "username": contract[0].get::<usize, &str>(1),
+    "request_ts": &contract[0].get::<usize, NaiveDateTime>(2).format("%Y-%m-%dT%H:%M:%S%.6f").to_string(),
+    "verified_ts": &contract[0].get::<usize, Option<NaiveDateTime>>(3).map(|t| t.format("%Y-%m-%dT%H:%M:%S%.6f").to_string()),
+    "status": contract[0].get::<usize, &str>(4),
+    "exports": contract[0].get::<usize, Option<Value>>(5),
+    "license": contract[0].get::<usize, &str>(6),
+    "lang": contract[0].get::<usize, &str>(7),
+    "dependencies": contract[0].get::<usize, Value>(8)
+  });
   Ok(HttpResponse::Ok().json(result))
 }
