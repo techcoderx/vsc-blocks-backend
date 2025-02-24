@@ -40,6 +40,7 @@ INSERT INTO vsc_cv.status(id, name) VALUES (1, 'queued');
 INSERT INTO vsc_cv.status(id, name) VALUES (2, 'in progress');
 INSERT INTO vsc_cv.status(id, name) VALUES (3, 'success');
 INSERT INTO vsc_cv.status(id, name) VALUES (4, 'failed');
+INSERT INTO vsc_cv.status(id, name) VALUES (5, 'not match');
 
 -- Names must follow SPDX identifier listed in https://spdx.org/licenses
 -- Full text may be found in https://github.com/spdx/license-list-data/tree/main/text
