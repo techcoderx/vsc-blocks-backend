@@ -4,7 +4,6 @@ use tokio_postgres::{ types::{ ToSql, Type }, NoTls, Row };
 use sql_minifier::minify_sql_file;
 use std::{ fmt, error };
 use log::info;
-use crate::config;
 
 const PSQL_CREATE_TABLES: &str = minify_sql_file!("src/sql/create_tables.sql");
 const PSQL_FX: &str = minify_sql_file!("src/sql/create_functions.sql");
@@ -27,9 +26,9 @@ pub struct DbPool {
 }
 
 impl DbPool {
-  pub fn init() -> Result<Self, CreatePoolError> {
+  pub fn init(psql_url: String) -> Result<Self, CreatePoolError> {
     let mut cfg = Config::new();
-    cfg.url = Some(config::config.psql_url.clone());
+    cfg.url = Some(psql_url);
     cfg.manager = Some(ManagerConfig {
       recycling_method: RecyclingMethod::Fast,
     });

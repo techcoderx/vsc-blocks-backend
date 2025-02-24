@@ -17,7 +17,7 @@ async fn main() -> std::io::Result<()> {
     std::env::set_var("RUST_LOG", config.log_level.clone().unwrap_or(String::from("info")));
   }
   env_logger::init();
-  let db_pool = match db::DbPool::init() {
+  let db_pool = match db::DbPool::init(config.psql_url.clone()) {
     Ok(p) => p,
     Err(e) => {
       error!("Failed to initialize db pool: {}", e.to_string());
