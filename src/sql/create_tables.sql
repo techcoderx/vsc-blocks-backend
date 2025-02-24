@@ -31,6 +31,7 @@ CREATE TABLE vsc_cv.contracts(
 CREATE TABLE vsc_cv.source_code(
   contract_addr VARCHAR(68) NOT NULL REFERENCES vsc_cv.contracts(contract_addr),
   fname VARCHAR(50) NOT NULL,
+  is_lockfile BOOLEAN NOT NULL DEFAULT FALSE,
   content VARCHAR,
   PRIMARY KEY(contract_addr, fname)
 );

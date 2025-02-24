@@ -166,7 +166,7 @@ impl Compiler {
                   .unwrap();
                 let _ = db
                   .query(
-                    "INSERT INTO vsc_cv.source_code(contract_addr, fname, content) VALUES ($1,$2,$3);",
+                    "INSERT INTO vsc_cv.source_code(contract_addr, fname, is_lockfile, content) VALUES ($1,$2,true,$3);",
                     &[
                       (&next_addr, Type::VARCHAR),
                       (&"pnpm-lock.yaml".to_string(), Type::VARCHAR),
