@@ -5,6 +5,7 @@ use bollard::container::{ Config, CreateContainerOptions, WaitContainerOptions }
 use bollard::models::{ HostConfig, ContainerWaitResponse };
 use futures_util::StreamExt;
 use serde_json;
+use chrono::Utc;
 use ipfs_dag::put_dag;
 use std::{ error::Error, fs, path::Path, process, sync::Arc };
 use log::{ info, debug, error };
@@ -174,10 +175,11 @@ impl Compiler {
                   ).await
                   .map_err(|e| { error!("Failed to insert pnpm-lock.yaml: {}", e) });
                 let updated_status = db.query(
-                  "UPDATE vsc_cv.contracts SET status=3::SMALLINT, exports=$2::JSONB WHERE contract_addr=$1;",
+                  "UPDATE vsc_cv.contracts SET status=3::SMALLINT, exports=$2::JSONB, verified_ts=$3 WHERE contract_addr=$1;",
                   &[
                     (&next_addr, Type::VARCHAR),
                     (&exports, Type::JSONB),
+                    (&Utc::now().naive_utc(), Type::TIMESTAMP),
                   ]
                 ).await;
                 if updated_status.is_err() {
