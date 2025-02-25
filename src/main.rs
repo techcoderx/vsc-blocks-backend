@@ -1,8 +1,9 @@
 use actix_web::{ web, App, HttpServer };
+use clap::Parser;
 use reqwest;
 use env_logger;
-use std::process;
-use log::error;
+use std::{ process, path::Path };
+use log::{ error, info, warn };
 mod config;
 mod constants;
 mod db;
@@ -12,6 +13,17 @@ mod compiler;
 
 #[actix_web::main]
 async fn main() -> std::io::Result<()> {
+  if config::Args::parse().dump_config {
+    std::env::set_var("RUST_LOG", String::from("info"));
+    env_logger::init();
+    if !Path::new(&config::Args::parse().config_file).exists() {
+      config::TomlConfig::dump_config_file();
+      info!("Dumped sample config file to config.toml");
+    } else {
+      warn!("Config file already exists, doing nothing.");
+    }
+    process::exit(0);
+  }
   let config = &config::config;
   if std::env::var("RUST_LOG").is_err() {
     std::env::set_var("RUST_LOG", config.log_level.clone().unwrap_or(String::from("info")));

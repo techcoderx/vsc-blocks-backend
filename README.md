@@ -9,7 +9,15 @@ Contract code compilation is done within Docker containers.
 Install [Rust](https://doc.rust-lang.org/book/ch01-01-installation.html) tools if not already, clone this repo and run the following:
 
 ```sh
-cargo b --release
+cargo b -r
+```
+
+## Configuration
+
+Dump a sample config file to `config.toml`:
+
+```sh
+./vsc-contract-verifier --dump-config
 ```
 
 ## License
