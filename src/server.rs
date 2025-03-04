@@ -42,17 +42,8 @@ impl fmt::Debug for RespErr {
   fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
     match self {
       RespErr::DbErr { msg } => write!(f, "{}", msg),
-      RespErr::VscHafErr => Ok(()),
-      RespErr::TokenMissing => Ok(()),
-      RespErr::TokenExpired => Ok(()),
-      RespErr::TokenInvalid => Ok(()),
-      RespErr::SigVerifyReqFail => Ok(()),
-      RespErr::SigVerifyFail => Ok(()),
-      RespErr::SigRecentBlkReqFail => Ok(()),
-      RespErr::SigTooOld => Ok(()),
-      RespErr::SigBhNotMatch => Ok(()),
-      RespErr::TokenGenFail => Ok(()),
       RespErr::BadRequest { .. } => Ok(()),
+      _ => Ok(()),
     }
   }
 }
@@ -140,7 +131,6 @@ fn verify_auth_token(req: &HttpRequest) -> Result<String, RespErr> {
         Err(err) =>
           match err.kind() {
             ErrorKind::ExpiredSignature => Err(RespErr::TokenExpired),
-            ErrorKind::InvalidToken => Err(RespErr::TokenInvalid),
             _ => Err(RespErr::TokenInvalid),
           }
       })?;
