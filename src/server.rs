@@ -239,7 +239,6 @@ async fn verify_new(
 ) -> Result<HttpResponse, RespErr> {
   let username = verify_auth_token(&req)?;
   let address = path.into_inner();
-  let db = ctx.get_ref().clone().db;
   let ct_req_method = config.vsc_haf_url.clone() + "/get_contract_by_id?id=" + &address;
   let ct_det = ctx.http_client
     .get(ct_req_method.as_str())
@@ -251,7 +250,7 @@ async fn verify_new(
     // as of now only error this api could return is contract not found with status code 200
     return Ok(HttpResponse::NotFound().json(json!(ct_det)));
   }
-  let can_verify: String = db
+  let can_verify: String = ctx.db
     .query(
       "SELECT vsc_cv.can_verify_new($1,$2,$3);",
       &[
@@ -303,10 +302,10 @@ async fn verify_new(
     }
   }
   // clear already uploaded source codes when the previous ones failed verification
-  db
+  ctx.db
     .query("DELETE FROM vsc_cv.source_code WHERE contract_addr=$1;", &[(&ct_det.contract_id, Type::VARCHAR)]).await
     .map_err(|e| RespErr::DbErr { msg: e.to_string() })?;
-  db
+  ctx.db
     .query(
       "INSERT INTO vsc_cv.contracts(contract_addr,bytecode_cid,hive_username,request_ts,status,license,lang,dependencies) VALUES($1,$2,$3,$4,0::SMALLINT,(SELECT id FROM vsc_cv.licenses WHERE name=$5),(SELECT id FROM vsc_cv.languages WHERE name=$6),$7);",
       &[
@@ -354,8 +353,7 @@ async fn upload_file(
       });
     }
   }
-  let db = ctx.get_ref().clone().db;
-  let can_upload: String = db
+  let can_upload: String = ctx.db
     .query(
       "SELECT vsc_cv.can_upload_file($1,$2);",
       &[
@@ -368,7 +366,7 @@ async fn upload_file(
   if can_upload.len() > 0 {
     return Err(RespErr::BadRequest { msg: can_upload });
   }
-  db
+  ctx.db
     .query(
       "INSERT INTO vsc_cv.source_code(contract_addr,fname,content) VALUES($1,$2,$3) ON CONFLICT(contract_addr,fname) DO UPDATE SET content=$3;",
       &[
@@ -385,8 +383,7 @@ async fn upload_file(
 async fn upload_complete(path: web::Path<String>, req: HttpRequest, ctx: web::Data<Context>) -> Result<HttpResponse, RespErr> {
   verify_auth_token(&req)?;
   let address = path.into_inner();
-  let db = ctx.get_ref().clone().db;
-  let contr = db
+  let contr = ctx.db
     .query("SELECT hive_username, status FROM vsc_cv.contracts WHERE contract_addr=$1;", &[(&address, Type::VARCHAR)]).await
     .map_err(|e| RespErr::DbErr { msg: e.to_string() })?;
   if contr.len() < 1 {
@@ -396,14 +393,14 @@ async fn upload_complete(path: web::Path<String>, req: HttpRequest, ctx: web::Da
   if status != 0 {
     return Err(RespErr::BadRequest { msg: String::from("Status is currently not pending upload") });
   }
-  let file_count: i64 = db
+  let file_count: i64 = ctx.db
     .query("SELECT COUNT(*) FROM vsc_cv.source_code WHERE contract_addr=$1;", &[(&address, Type::VARCHAR)]).await
     .map_err(|e| RespErr::DbErr { msg: e.to_string() })?
     [0].get(0);
   if file_count < 1 {
     return Err(RespErr::BadRequest { msg: String::from("No source files were uploaded for this contract") });
   }
-  db
+  ctx.db
     .query("UPDATE vsc_cv.contracts SET status=1::SMALLINT WHERE contract_addr=$1;", &[(&address, Type::VARCHAR)]).await
     .map_err(|e| RespErr::DbErr { msg: e.to_string() })?;
   ctx.compiler.notify();
@@ -413,10 +410,8 @@ async fn upload_complete(path: web::Path<String>, req: HttpRequest, ctx: web::Da
 
 #[get("/languages")]
 async fn list_langs(ctx: web::Data<Context>) -> Result<HttpResponse, RespErr> {
-  let rows = ctx
-    .get_ref()
-    .clone()
-    .db.query("SELECT jsonb_agg(name) FROM vsc_cv.languages;", &[]).await
+  let rows = ctx.db
+    .query("SELECT jsonb_agg(name) FROM vsc_cv.languages;", &[]).await
     .map_err(|e| RespErr::DbErr { msg: e.to_string() })?;
   let result: Value = rows[0].get(0);
   Ok(HttpResponse::Ok().json(result))
@@ -424,10 +419,8 @@ async fn list_langs(ctx: web::Data<Context>) -> Result<HttpResponse, RespErr> {
 
 #[get("/licenses")]
 async fn list_licenses(ctx: web::Data<Context>) -> Result<HttpResponse, RespErr> {
-  let rows = ctx
-    .get_ref()
-    .clone()
-    .db.query("SELECT jsonb_agg(name) FROM vsc_cv.licenses;", &[]).await
+  let rows = ctx.db
+    .query("SELECT jsonb_agg(name) FROM vsc_cv.licenses;", &[]).await
     .map_err(|e| RespErr::DbErr { msg: e.to_string() })?;
   let result: Value = rows[0].get(0);
   Ok(HttpResponse::Ok().json(result))
@@ -436,10 +429,8 @@ async fn list_licenses(ctx: web::Data<Context>) -> Result<HttpResponse, RespErr>
 #[get("/contract/{address}")]
 async fn contract_info(path: web::Path<String>, ctx: web::Data<Context>) -> Result<HttpResponse, RespErr> {
   let addr = path.into_inner();
-  let contract = ctx
-    .get_ref()
-    .clone()
-    .db.query(
+  let contract = ctx.db
+    .query(
       "SELECT c.bytecode_cid, c.hive_username, c.request_ts, c.verified_ts, s.name, c.exports, lc.name, lg.name, c.dependencies FROM vsc_cv.contracts c JOIN vsc_cv.status s ON s.id = c.status JOIN vsc_cv.licenses lc ON lc.id = c.license JOIN vsc_cv.languages lg ON lg.id = c.lang WHERE contract_addr=$1;",
       &[(&addr, Type::VARCHAR)]
     ).await
@@ -466,10 +457,8 @@ async fn contract_info(path: web::Path<String>, ctx: web::Data<Context>) -> Resu
 #[get("/contract/{address}/files/ls")]
 async fn contract_files_ls(path: web::Path<String>, ctx: web::Data<Context>) -> Result<HttpResponse, RespErr> {
   let addr = path.into_inner();
-  let files = ctx
-    .get_ref()
-    .clone()
-    .db.query(
+  let files = ctx.db
+    .query(
       "SELECT jsonb_agg(fname) FROM vsc_cv.source_code WHERE contract_addr=$1 AND is_lockfile=false;",
       &[(&addr, Type::VARCHAR)]
     ).await
@@ -480,10 +469,8 @@ async fn contract_files_ls(path: web::Path<String>, ctx: web::Data<Context>) -> 
 #[get("/contract/{address}/files/cat/{filename}")]
 async fn contract_files_cat(path: web::Path<(String, String)>, ctx: web::Data<Context>) -> Result<HttpResponse, RespErr> {
   let (addr, filename) = path.into_inner();
-  let files = ctx
-    .get_ref()
-    .clone()
-    .db.query(
+  let files = ctx.db
+    .query(
       "SELECT content FROM vsc_cv.source_code WHERE contract_addr=$1 AND fname=$2;",
       &[
         (&addr, Type::VARCHAR),
