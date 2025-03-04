@@ -9,7 +9,7 @@ use semver::VersionReq;
 use chrono::{ NaiveDateTime, Utc, Duration };
 use hex;
 use sha2::{ Sha256, Digest };
-use jsonwebtoken::{ Header, EncodingKey };
+use jsonwebtoken::{ Header, EncodingKey, DecodingKey, Algorithm, Validation, errors::ErrorKind };
 use log::{ error, debug };
 use std::{ fmt, io::Read };
 use crate::{ constants::*, vsc_types::DgpAtBlock };
@@ -24,6 +24,9 @@ enum RespErr {
     msg: String,
   },
   #[display("Failed to query VSC-HAF backend")] VscHafErr,
+  #[display("Missing access token in authentication header")] TokenMissing,
+  #[display("Access token expired")] TokenExpired,
+  #[display("Access token is invalid")] TokenInvalid,
   #[display("Failed to make signature verification request")] SigVerifyReqFail,
   #[display("Failed to verify signature")] SigVerifyFail,
   #[display("Failed to check for recent block")] SigRecentBlkReqFail,
@@ -40,6 +43,9 @@ impl fmt::Debug for RespErr {
     match self {
       RespErr::DbErr { msg } => write!(f, "{}", msg),
       RespErr::VscHafErr => Ok(()),
+      RespErr::TokenMissing => Ok(()),
+      RespErr::TokenExpired => Ok(()),
+      RespErr::TokenInvalid => Ok(()),
       RespErr::SigVerifyReqFail => Ok(()),
       RespErr::SigVerifyFail => Ok(()),
       RespErr::SigRecentBlkReqFail => Ok(()),
@@ -66,6 +72,9 @@ impl actix_web::error::ResponseError for RespErr {
     match *self {
       RespErr::DbErr { .. } => StatusCode::INTERNAL_SERVER_ERROR,
       RespErr::VscHafErr => StatusCode::INTERNAL_SERVER_ERROR,
+      RespErr::TokenMissing => StatusCode::UNAUTHORIZED,
+      RespErr::TokenExpired => StatusCode::UNAUTHORIZED,
+      RespErr::TokenInvalid => StatusCode::UNAUTHORIZED,
       RespErr::SigVerifyReqFail => StatusCode::INTERNAL_SERVER_ERROR,
       RespErr::SigVerifyFail => StatusCode::UNAUTHORIZED,
       RespErr::SigRecentBlkReqFail => StatusCode::INTERNAL_SERVER_ERROR,
@@ -96,6 +105,51 @@ struct Claims {
   network: String,
   iat: i64, // Issued at (timestamp)
   exp: i64, // Expiration time (timestamp)
+}
+
+fn verify_auth_token(req: &HttpRequest) -> Result<String, RespErr> {
+  if config.auth.enabled {
+    if let Some(auth_header) = req.clone().headers().get("Authorization") {
+      let auth_value = auth_header.to_str().unwrap_or("");
+      let parts = auth_value.split(" ").collect::<Vec<&str>>();
+      debug!("Authentication header: {}", auth_value);
+      if parts.len() < 2 || parts[0] != "Bearer" {
+        return Err(RespErr::TokenMissing);
+      }
+      let mut validation = Validation::new(Algorithm::HS256);
+      validation.validate_exp = true;
+      validation.leeway = 0;
+      let claims = (match
+        jsonwebtoken::decode::<Claims>(
+          parts[1],
+          &DecodingKey::from_secret(hex::decode(config.auth.key.clone().unwrap()).unwrap().as_slice()),
+          &validation
+        )
+      {
+        Ok(token_data) => {
+          // Additional manual checks if needed
+          let now = Utc::now().timestamp();
+
+          // Verify iat is in the past
+          if token_data.claims.iat > now {
+            return Err(RespErr::TokenExpired);
+          }
+
+          Ok(token_data.claims)
+        }
+        Err(err) =>
+          match err.kind() {
+            ErrorKind::ExpiredSignature => Err(RespErr::TokenExpired),
+            ErrorKind::InvalidToken => Err(RespErr::TokenInvalid),
+            _ => Err(RespErr::TokenInvalid),
+          }
+      })?;
+      return Ok(claims.user);
+    } else {
+      return Err(RespErr::TokenMissing);
+    }
+  }
+  Ok(String::from(""))
 }
 
 #[post("/login")]
@@ -181,7 +235,6 @@ async fn login(payload: String, ctx: web::Data<Context>) -> Result<HttpResponse,
 
 #[derive(Serialize, Deserialize)]
 struct ReqVerifyNew {
-  username: String,
   license: String,
   lang: String,
   dependencies: Value,
@@ -189,10 +242,12 @@ struct ReqVerifyNew {
 
 #[post("/verify/{address}/new")]
 async fn verify_new(
+  req: HttpRequest,
   path: web::Path<String>,
   req_data: web::Json<ReqVerifyNew>,
   ctx: web::Data<Context>
 ) -> Result<HttpResponse, RespErr> {
+  let username = verify_auth_token(&req)?;
   let address = path.into_inner();
   let db = ctx.get_ref().clone().db;
   let ct_req_method = config.vsc_haf_url.clone() + "/get_contract_by_id?id=" + &address;
@@ -267,7 +322,7 @@ async fn verify_new(
       &[
         (&ct_det.contract_id, Type::VARCHAR),
         (&ct_det.code, Type::VARCHAR),
-        (&req_data.username, Type::VARCHAR),
+        (&username, Type::VARCHAR),
         (&Utc::now().naive_utc(), Type::TIMESTAMP),
         (&req_data.license, Type::VARCHAR),
         (&req_data.lang, Type::VARCHAR),
@@ -292,13 +347,8 @@ async fn upload_file(
   MultipartForm(mut form): MultipartForm<VerifUploadForm>,
   ctx: web::Data<Context>
 ) -> Result<HttpResponse, RespErr> {
+  verify_auth_token(&req)?;
   let address = path.into_inner();
-  if let Some(auth_header) = req.headers().get("Authorization") {
-    let auth_value = auth_header.to_str().unwrap_or("");
-    debug!("Authentication header: {}", auth_value);
-    debug!("Request query {}", req.query_string());
-    // TODO: authenticate user
-  }
   debug!("Uploaded file {} with size: {}", form.file.file_name.unwrap(), form.file.size);
   debug!("Contract address {}, new filename: {}", &address, &form.filename.0);
   if form.file.size > 1024 * 1024 {
@@ -343,13 +393,8 @@ async fn upload_file(
 
 #[post("/verify/{address}/complete")]
 async fn upload_complete(path: web::Path<String>, req: HttpRequest, ctx: web::Data<Context>) -> Result<HttpResponse, RespErr> {
+  verify_auth_token(&req)?;
   let address = path.into_inner();
-  if let Some(auth_header) = req.headers().get("Authorization") {
-    let auth_value = auth_header.to_str().unwrap_or("");
-    debug!("Authentication header: {}", auth_value);
-    debug!("Request query {}", req.query_string());
-    // TODO: authenticate user
-  }
   let db = ctx.get_ref().clone().db;
   let contr = db
     .query("SELECT hive_username, status FROM vsc_cv.contracts WHERE contract_addr=$1;", &[(&address, Type::VARCHAR)]).await
