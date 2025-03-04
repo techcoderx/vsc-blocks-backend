@@ -50,6 +50,7 @@ async fn main() -> std::io::Result<()> {
     App::new()
       .app_data(web::Data::new(server_ctx.clone()))
       .service(server::hello)
+      .service(server::login)
       .service(server::verify_new)
       .service(server::upload_file)
       .service(server::upload_complete)

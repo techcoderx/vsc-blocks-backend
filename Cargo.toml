@@ -14,14 +14,18 @@ deadpool-postgres = "0.14.1"
 derive_more = { version = "1.0.0", features = ["display", "error"] }
 env_logger = "0.11.6"
 futures-util = "0.3.31"
+hex = "0.4.3"
 ipfs_dag = { path = "lib/ipfs_dag" }
+jsonwebtoken = "9.3.1"
 lazy_static = "1.5.0"
 log = "0.4.26"
+rand = "0.9.0"
 reqwest = { version = "0.12.12", features = ["json"] }
 semver = "1.0.25"
 serde = { version = "1.0.218", features = ["derive"] }
 serde_derive = "1.0.218"
 serde_json = "1.0.139"
+sha2 = "0.10.8"
 sql_minifier = { path = "lib/sql_minifier" }
 tokio = "1.43.0"
 tokio-postgres = { version = "0.7.13", features = [

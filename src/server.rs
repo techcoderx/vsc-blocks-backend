@@ -4,12 +4,15 @@ use derive_more::derive::{ Display, Error };
 use tokio_postgres::types::Type;
 use reqwest;
 use serde::{ Serialize, Deserialize };
-use serde_json::{ json, Value };
+use serde_json::{ json, Number, Value };
 use semver::VersionReq;
-use chrono::{ NaiveDateTime, Utc };
+use chrono::{ NaiveDateTime, Utc, Duration };
+use hex;
+use sha2::{ Sha256, Digest };
+use jsonwebtoken::{ Header, EncodingKey };
 use log::{ error, debug };
 use std::{ fmt, io::Read };
-use crate::constants::{ * };
+use crate::{ constants::*, vsc_types::DgpAtBlock };
 use crate::db::DbPool;
 use crate::compiler::Compiler;
 use crate::vsc_types;
@@ -21,6 +24,12 @@ enum RespErr {
     msg: String,
   },
   #[display("Failed to query VSC-HAF backend")] VscHafErr,
+  #[display("Failed to make signature verification request")] SigVerifyReqFail,
+  #[display("Failed to verify signature")] SigVerifyFail,
+  #[display("Failed to check for recent block")] SigRecentBlkReqFail,
+  #[display("Signature is too old")] SigTooOld,
+  #[display("Block hash does not match the corresponding block number")] SigBhNotMatch,
+  #[display("Failed to generate access token")] TokenGenFail,
   #[display("{msg}")] BadRequest {
     msg: String,
   },
@@ -31,6 +40,12 @@ impl fmt::Debug for RespErr {
     match self {
       RespErr::DbErr { msg } => write!(f, "{}", msg),
       RespErr::VscHafErr => Ok(()),
+      RespErr::SigVerifyReqFail => Ok(()),
+      RespErr::SigVerifyFail => Ok(()),
+      RespErr::SigRecentBlkReqFail => Ok(()),
+      RespErr::SigTooOld => Ok(()),
+      RespErr::SigBhNotMatch => Ok(()),
+      RespErr::TokenGenFail => Ok(()),
       RespErr::BadRequest { .. } => Ok(()),
     }
   }
@@ -51,6 +66,12 @@ impl actix_web::error::ResponseError for RespErr {
     match *self {
       RespErr::DbErr { .. } => StatusCode::INTERNAL_SERVER_ERROR,
       RespErr::VscHafErr => StatusCode::INTERNAL_SERVER_ERROR,
+      RespErr::SigVerifyReqFail => StatusCode::INTERNAL_SERVER_ERROR,
+      RespErr::SigVerifyFail => StatusCode::UNAUTHORIZED,
+      RespErr::SigRecentBlkReqFail => StatusCode::INTERNAL_SERVER_ERROR,
+      RespErr::SigTooOld => StatusCode::UNAUTHORIZED,
+      RespErr::SigBhNotMatch => StatusCode::UNAUTHORIZED,
+      RespErr::TokenGenFail => StatusCode::INTERNAL_SERVER_ERROR,
       RespErr::BadRequest { .. } => StatusCode::BAD_REQUEST,
     }
   }
@@ -66,6 +87,96 @@ pub struct Context {
 #[get("/")]
 async fn hello() -> impl Responder {
   HttpResponse::Ok().body("Hello world!")
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+struct Claims {
+  user: String,
+  app: String,
+  network: String,
+  iat: i64, // Issued at (timestamp)
+  exp: i64, // Expiration time (timestamp)
+}
+
+#[post("/login")]
+async fn login(payload: String, ctx: web::Data<Context>) -> Result<HttpResponse, RespErr> {
+  if !config.auth.enabled {
+    return Ok(HttpResponse::NotFound().json(json!({"error": "Auth is disabled"})));
+  }
+  let parts: Vec<&str> = payload.split(":").collect();
+  if parts.len() != 6 || parts[1] != &config.auth.id.clone().unwrap() || parts[2] != "hive" {
+    return Err(RespErr::BadRequest { msg: String::from("Invalid auth message format") });
+  }
+  let block_num = parts[3].parse::<u64>();
+  if block_num.is_err() {
+    return Err(RespErr::BadRequest { msg: String::from("Could not parse block number") });
+  }
+  let block_num = block_num.unwrap();
+  let original = (&parts[0..5]).join(":");
+  let mut hasher = Sha256::new();
+  hasher.update(&original);
+  let hash = hex::encode(&hasher.finalize()[..]);
+  let verify_req = ctx.http_client
+    .post(config.auth.hive_rpc.clone().unwrap())
+    .json::<Value>(
+      &json!({
+    "id": 1,
+    "jsonrpc": "2.0",
+    "method": "database_api.verify_signatures",
+    "params": {
+      "hash": &hash,
+      "signatures": [parts[5]],
+      "required_owner": [],
+      "required_active": [],
+      "required_posting": [parts[0]],
+      "required_other": []
+  }
+  })
+    )
+    .send().await
+    .map_err(|_| RespErr::SigVerifyReqFail)?
+    .json::<vsc_types::JsonRpcResp>().await
+    .map_err(|_| RespErr::SigVerifyReqFail)?;
+  let is_valid =
+    !verify_req.error.is_some() && verify_req.result.is_some() && verify_req.result.unwrap().clone()["valid"].as_bool().unwrap();
+  if !is_valid {
+    return Err(RespErr::SigVerifyFail);
+  }
+  let head_block_num = ctx.http_client
+    .get(config.auth.hive_rpc.clone().unwrap() + "/hafah-api/headblock")
+    .send().await
+    .map_err(|_| RespErr::SigRecentBlkReqFail)?
+    .json::<Number>().await
+    .map_err(|_| RespErr::SigRecentBlkReqFail)?;
+  if head_block_num.as_u64().unwrap() > block_num + config.auth.timeout_blocks.unwrap_or(20) {
+    return Err(RespErr::SigTooOld);
+  }
+  let dgp_at_block = ctx.http_client
+    .get(config.auth.hive_rpc.clone().unwrap() + "/hafah-api/global-state?block-num=" + &block_num.to_string())
+    .send().await
+    .map_err(|_| RespErr::SigRecentBlkReqFail)?
+    .json::<DgpAtBlock>().await
+    .map_err(|_| RespErr::SigRecentBlkReqFail)?;
+  if &dgp_at_block.hash != parts[4] {
+    return Err(RespErr::SigBhNotMatch);
+  }
+
+  // generate jwt
+  let now = Utc::now();
+  let iat = now.timestamp();
+  let exp = (now + Duration::hours(1)).timestamp();
+  let claims = Claims {
+    user: String::from(parts[0]),
+    app: config.auth.id.clone().unwrap(),
+    network: String::from("hive"),
+    iat,
+    exp,
+  };
+  let decoded_secret = hex::decode(config.auth.key.clone().unwrap()).map_err(|_| RespErr::TokenGenFail)?;
+  let token = jsonwebtoken
+    ::encode(&Header::default(), &claims, &EncodingKey::from_secret(&decoded_secret))
+    .map_err(|_| RespErr::TokenGenFail)?;
+  Ok(HttpResponse::Ok().json(json!({ "access_token": token })))
 }
 
 #[derive(Serialize, Deserialize)]
