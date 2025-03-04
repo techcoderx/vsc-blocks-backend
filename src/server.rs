@@ -42,7 +42,6 @@ impl fmt::Debug for RespErr {
   fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
     match self {
       RespErr::DbErr { msg } => write!(f, "{}", msg),
-      RespErr::BadRequest { .. } => Ok(()),
       _ => Ok(()),
     }
   }
