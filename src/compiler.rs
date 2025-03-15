@@ -142,7 +142,7 @@ impl Compiler {
           // Create the container with a specific name
           let cont_opt = CreateContainerOptions {
             name: cont_name,
-            platform: Some("linux/arm64"),
+            platform: None,
           };
           let container = docker.create_container(Some(cont_opt), cont_conf).await.unwrap();
           docker.start_container::<String>(&container.id, None).await.unwrap();
