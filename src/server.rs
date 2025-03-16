@@ -437,6 +437,12 @@ async fn contract_info(path: web::Path<String>, ctx: web::Data<Context>) -> Resu
   if contract.len() == 0 {
     return Ok(HttpResponse::NotFound().json(json!({"error": "contract not found"})));
   }
+  let files = ctx.db
+    .query(
+      "SELECT jsonb_agg(fname) FROM vsc_cv.source_code WHERE contract_addr=$1 AND is_lockfile=false;",
+      &[(&addr, Type::VARCHAR)]
+    ).await
+    .map_err(|e| RespErr::DbErr { msg: e.to_string() })?;
   let result =
     json!({
     "address": &addr,
@@ -446,6 +452,7 @@ async fn contract_info(path: web::Path<String>, ctx: web::Data<Context>) -> Resu
     "verified_ts": &contract[0].get::<usize, Option<NaiveDateTime>>(3).map(|t| t.format("%Y-%m-%dT%H:%M:%S%.6f").to_string()),
     "status": contract[0].get::<usize, &str>(4),
     "exports": contract[0].get::<usize, Option<Value>>(5),
+    "files": files[0].get::<usize, Value>(0),
     "license": contract[0].get::<usize, &str>(6),
     "lang": contract[0].get::<usize, &str>(7),
     "dependencies": contract[0].get::<usize, Value>(8)
@@ -481,4 +488,19 @@ async fn contract_files_cat(path: web::Path<(String, String)>, ctx: web::Data<Co
     return Ok(HttpResponse::NotFound().body("Error 404 file not found"));
   }
   Ok(HttpResponse::Ok().body(files[0].get::<usize, String>(0)))
+}
+
+#[get("/bytecode/{cid}/lookupaddr")]
+async fn bytecode_lookup_addr(path: web::Path<String>, ctx: web::Data<Context>) -> Result<HttpResponse, RespErr> {
+  let cid = path.into_inner();
+  let addr = ctx.db
+    .query(
+      "SELECT contract_addr FROM vsc_cv.contracts WHERE bytecode_cid=$1 AND status=3::SMALLINT LIMIT 1;",
+      &[(&cid, Type::VARCHAR)]
+    ).await
+    .map_err(|e| RespErr::DbErr { msg: e.to_string() })?;
+  if addr.len() == 0 {
+    return Ok(HttpResponse::NotFound().json(json!({"error": "no matching contracts found"})));
+  }
+  Ok(HttpResponse::Ok().json(json!({"address": addr[0].get::<usize, &str>(0)})))
 }

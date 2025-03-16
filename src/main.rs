@@ -63,6 +63,7 @@ async fn main() -> std::io::Result<()> {
       .service(server::contract_info)
       .service(server::contract_files_ls)
       .service(server::contract_files_cat)
+      .service(server::bytecode_lookup_addr)
   })
     .bind((config.server.address.as_str(), config.server.port))?
     .run().await
