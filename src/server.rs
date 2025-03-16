@@ -443,6 +443,12 @@ async fn contract_info(path: web::Path<String>, ctx: web::Data<Context>) -> Resu
       &[(&addr, Type::VARCHAR)]
     ).await
     .map_err(|e| RespErr::DbErr { msg: e.to_string() })?;
+  let lockfilename = ctx.db
+    .query(
+      "SELECT fname FROM vsc_cv.source_code WHERE contract_addr=$1 AND is_lockfile=true LIMIT 1;", // assume only one lockfile per contract
+      &[(&addr, Type::VARCHAR)]
+    ).await
+    .map_err(|e| RespErr::DbErr { msg: e.to_string() })?;
   let result =
     json!({
     "address": &addr,
@@ -453,6 +459,10 @@ async fn contract_info(path: web::Path<String>, ctx: web::Data<Context>) -> Resu
     "status": contract[0].get::<usize, &str>(4),
     "exports": contract[0].get::<usize, Option<Value>>(5),
     "files": files[0].get::<usize, Value>(0),
+    "lockfile": match lockfilename.len() {
+      0 => None,
+      _ => Some(lockfilename[0].get::<usize, &str>(0)),
+    },
     "license": contract[0].get::<usize, &str>(6),
     "lang": contract[0].get::<usize, &str>(7),
     "dependencies": contract[0].get::<usize, Value>(8)
