@@ -1,4 +1,5 @@
 use actix_web::{ web, App, HttpServer };
+use actix_cors::Cors;
 use clap::Parser;
 use reqwest;
 use env_logger;
@@ -48,7 +49,9 @@ async fn main() -> std::io::Result<()> {
   compiler.notify();
   let server_ctx = server::Context { db: db_pool, compiler, http_client: reqwest::Client::new() };
   HttpServer::new(move || {
+    let cors = Cors::default().allow_any_origin().allow_any_method().allow_any_header().max_age(3600);
     App::new()
+      .wrap(cors)
       .app_data(web::Data::new(server_ctx.clone()))
       .service(server::hello)
       .service(server::login)
