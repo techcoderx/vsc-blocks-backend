@@ -500,6 +500,21 @@ async fn contract_files_cat(path: web::Path<(String, String)>, ctx: web::Data<Co
   Ok(HttpResponse::Ok().body(files[0].get::<usize, String>(0)))
 }
 
+#[get("/contract/{address}/files/catall")]
+async fn contract_files_cat_all(path: web::Path<String>, ctx: web::Data<Context>) -> Result<HttpResponse, RespErr> {
+  let addr = path.into_inner();
+  let files = ctx.db
+    .query(
+      "SELECT jsonb_agg(jsonb_build_object('name',fname,'content',content)) FROM vsc_cv.source_code WHERE contract_addr=$1 AND is_lockfile=false;",
+      &[(&addr, Type::VARCHAR)]
+    ).await
+    .map_err(|e| RespErr::DbErr { msg: e.to_string() })?;
+  if files.len() == 0 {
+    return Ok(HttpResponse::NotFound().body("Error 404 file not found"));
+  }
+  Ok(HttpResponse::Ok().json(files[0].get::<usize, Value>(0)))
+}
+
 #[get("/bytecode/{cid}/lookupaddr")]
 async fn bytecode_lookup_addr(path: web::Path<String>, ctx: web::Data<Context>) -> Result<HttpResponse, RespErr> {
   let cid = path.into_inner();
