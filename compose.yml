@@ -1,0 +1,30 @@
+name: vsc-cv
+services:
+  app:
+    image: vsc-cv
+    build: .
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+      - ${VSC_CV_CONFIG_FILE:-./config.toml}:/app/config/config.toml
+    ports:
+      - ${VSC_CV_PORT:-8080}:8080
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  postgres:
+    image: postgres:17-alpine
+    environment:
+      POSTGRES_USER: ${DB_USER:-postgres}
+      POSTGRES_PASSWORD: ${DB_PASSWORD:-mysecretpassword}
+      POSTGRES_DB: ${DB_NAME:-postgres}
+    volumes:
+      - postgresd:/var/lib/postgresql/data
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U ${DB_USER:-postgres} -d ${DB_NAME:-postgres}']
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+volumes:
+  postgresd:
