@@ -20,6 +20,15 @@ Dump a sample config file to `config.toml`:
 ./vsc-contract-verifier --dump-config
 ```
 
+## Building compiler docker image
+
+### AssemblyScript
+
+```sh
+cd as_compiler
+docker build -t as-compiler .
+```
+
 ## License
 
 This project is dual licensed under the [MIT License](https://github.com/techcoderx/vsc-contract-verifier/blob/main/LICENSE-MIT) or [Apache License 2.0](https://github.com/techcoderx/vsc-contract-verifier/blob/main/LICENSE-APACHE).
