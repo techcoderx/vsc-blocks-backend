@@ -306,7 +306,7 @@ async fn verify_new(
     .map_err(|e| RespErr::DbErr { msg: e.to_string() })?;
   ctx.db
     .query(
-      "INSERT INTO vsc_cv.contracts(contract_addr,bytecode_cid,hive_username,request_ts,status,license,lang,dependencies) VALUES($1,$2,$3,$4,0::SMALLINT,(SELECT id FROM vsc_cv.licenses WHERE name=$5),(SELECT id FROM vsc_cv.languages WHERE name=$6),$7);",
+      "SELECT vsc_cv.verify_new($1,$2,$3,$4,$5,$6,$7);",
       &[
         (&ct_det.contract_id, Type::VARCHAR),
         (&ct_det.code, Type::VARCHAR),
@@ -439,7 +439,7 @@ async fn contract_info(path: web::Path<String>, ctx: web::Data<Context>) -> Resu
   }
   let files = ctx.db
     .query(
-      "SELECT jsonb_agg(fname) FROM vsc_cv.source_code WHERE contract_addr=$1 AND is_lockfile=false;",
+      "SELECT COALESCE(jsonb_agg(fname), '[]'::jsonb) FROM vsc_cv.source_code WHERE contract_addr=$1 AND is_lockfile=false;",
       &[(&addr, Type::VARCHAR)]
     ).await
     .map_err(|e| RespErr::DbErr { msg: e.to_string() })?;

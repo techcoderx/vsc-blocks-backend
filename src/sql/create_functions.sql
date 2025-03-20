@@ -17,11 +17,39 @@ BEGIN
     RETURN format('Language %s is currently unsupported.', _lang);
   END IF;
   SELECT status INTO _status FROM vsc_cv.contracts c WHERE c.contract_addr = _contract_addr;
-  IF _status <> 4 AND _status <> 5 THEN
+  IF _status <> 0 AND _status <> 4 AND _status <> 5 THEN
     RETURN 'Contract is already verified or being verified.';
   ELSE
     RETURN '';
   END IF;
+END $$
+LANGUAGE plpgsql VOLATILE;
+
+CREATE OR REPLACE FUNCTION vsc_cv.verify_new(
+  _addr VARCHAR,
+  _bytecode VARCHAR,
+  _user VARCHAR,
+  _ts TIMESTAMP,
+  _license VARCHAR,
+  _lang VARCHAR,
+  _deps jsonb
+)
+RETURNS void AS $$
+DECLARE
+  _license_id SMALLINT;
+  _lang_id SMALLINT;
+BEGIN
+  SELECT id INTO _license_id FROM vsc_cv.licenses WHERE name=_license;
+  SELECT id INTO _lang_id FROM vsc_cv.languages WHERE name=_lang;
+  INSERT INTO vsc_cv.contracts(contract_addr,bytecode_cid,hive_username,request_ts,status,license,lang,dependencies)
+    VALUES(_addr,_bytecode,_user,_ts,0::SMALLINT,_license_id,_lang_id,_deps)
+    ON CONFLICT(contract_addr) DO UPDATE SET
+      hive_username = _user,
+      request_ts = _ts,
+      status = 0::SMALLINT,
+      license = _license_id,
+      lang = _lang_id,
+      dependencies = _deps;
 END $$
 LANGUAGE plpgsql VOLATILE;
 
