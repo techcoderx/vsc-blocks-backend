@@ -83,7 +83,7 @@ pub struct Context {
   pub http_client: reqwest::Client,
 }
 
-#[get("/")]
+#[get("")]
 async fn hello() -> impl Responder {
   HttpResponse::Ok().body("Hello world!")
 }

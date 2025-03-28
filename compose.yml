@@ -9,7 +9,7 @@ services:
     ports:
       - ${VSC_CV_PORT:-8080}:8080
     healthcheck:
-      test: ['CMD-SHELL', 'curl -f 127.0.0.1:8080']
+      test: ['CMD-SHELL', 'curl -f 127.0.0.1:8080/cv-api/v1']
       interval: 20s
       timeout: 3s
       retries: 5

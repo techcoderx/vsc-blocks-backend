@@ -1,4 +1,4 @@
-use actix_web::{ web, App, HttpServer };
+use actix_web::{ web, middleware::NormalizePath, App, HttpServer };
 use actix_cors::Cors;
 use clap::Parser;
 use reqwest;
@@ -52,6 +52,7 @@ async fn main() -> std::io::Result<()> {
     let cors = Cors::default().allow_any_origin().allow_any_method().allow_any_header().max_age(3600);
     App::new()
       .wrap(cors)
+      .wrap(NormalizePath::trim())
       .app_data(web::Data::new(server_ctx.clone()))
       .service(
         web
