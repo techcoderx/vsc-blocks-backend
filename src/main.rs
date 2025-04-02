@@ -8,6 +8,7 @@ use log::{ error, info, warn };
 mod config;
 mod constants;
 mod db;
+mod server_types;
 mod server;
 mod vsc_types;
 mod compiler;
@@ -47,7 +48,7 @@ async fn main() -> std::io::Result<()> {
   }
   let compiler = compiler::Compiler::init(&db_pool);
   compiler.notify();
-  let server_ctx = server::Context { db: db_pool, compiler, http_client: reqwest::Client::new() };
+  let server_ctx = server_types::Context { db: db_pool, compiler, http_client: reqwest::Client::new() };
   HttpServer::new(move || {
     let cors = Cors::default().allow_any_origin().allow_any_method().allow_any_header().max_age(3600);
     App::new()
