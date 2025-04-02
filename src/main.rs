@@ -8,11 +8,12 @@ use log::{ error, info, warn };
 mod config;
 mod constants;
 mod db;
+mod mongo;
 mod server_types;
 mod endpoints;
 mod vsc_types;
 mod compiler;
-use endpoints::cv_api;
+use endpoints::{ be_api, cv_api };
 
 #[actix_web::main]
 async fn main() -> std::io::Result<()> {
@@ -47,9 +48,16 @@ async fn main() -> std::io::Result<()> {
       process::exit(1);
     }
   }
+  let vsc_db = match mongo::MongoDB::init(config.mongo_url.clone()).await {
+    Ok(d) => d,
+    Err(e) => {
+      error!("Failed to initialize VSC db pool: {}", e.to_string());
+      process::exit(1);
+    }
+  };
   let compiler = compiler::Compiler::init(&db_pool);
   compiler.notify();
-  let server_ctx = server_types::Context { db: db_pool, compiler, http_client: reqwest::Client::new() };
+  let server_ctx = server_types::Context { db: db_pool, vsc_db, compiler, http_client: reqwest::Client::new() };
   HttpServer::new(move || {
     let cors = Cors::default().allow_any_origin().allow_any_method().allow_any_header().max_age(3600);
     App::new()
@@ -72,6 +80,7 @@ async fn main() -> std::io::Result<()> {
           .service(cv_api::contract_files_cat_all)
           .service(cv_api::bytecode_lookup_addr)
       )
+      .service(web::scope("/be-api/v1").service(be_api::hello).service(be_api::props).service(be_api::list_witnesses))
   })
     .bind((config.server.address.as_str(), config.server.port))?
     .run().await

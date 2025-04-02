@@ -27,3 +27,26 @@ pub struct DgpAtBlock {
   pub block_num: u64,
   pub hash: String,
 }
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct DIDKey {
+  ct: String,
+  t: String,
+  key: String,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct Witnesses {
+  account: String,
+  height: i64,
+  did_keys: Vec<DIDKey>,
+  enabled: bool,
+  gateway_key: String,
+  git_commit: String,
+  net_id: String,
+  peer_addrs: Vec<String>,
+  peer_id: String,
+  protocol_version: i64,
+  ts: String,
+  version_id: String,
+}

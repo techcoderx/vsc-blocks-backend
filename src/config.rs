@@ -42,6 +42,7 @@ pub struct TomlConfig {
   pub log_level: Option<String>,
   pub psql_url: String,
   pub vsc_haf_url: String,
+  pub mongo_url: String,
   pub auth: AuthConf,
   pub server: ServerConfig,
   pub ascompiler: ASCompilerConf,
@@ -63,6 +64,7 @@ impl TomlConfig {
       log_level: Some(String::from("info")),
       psql_url: String::from("postgres://postgres:mysecretpassword@127.0.0.1:5432/postgres"),
       vsc_haf_url: String::from("https://vsc-haf.techcoderx.com/rpc"),
+      mongo_url: String::from("mongodb://localhost:27017"),
       auth: AuthConf {
         enabled: true,
         id: Some(String::from("vsc_cv_login")),
