@@ -1,5 +1,6 @@
 use actix_web::{ get, post, web, HttpRequest, HttpResponse, Responder };
 use actix_multipart::form::{ tempfile::TempFile, MultipartForm, text::Text };
+use mongodb::bson::doc;
 use tokio_postgres::types::Type;
 use serde::{ Serialize, Deserialize };
 use serde_json::{ json, Number, Value };
@@ -170,17 +171,11 @@ async fn verify_new(
 ) -> Result<HttpResponse, RespErr> {
   let username = verify_auth_token(&req)?;
   let address = path.into_inner();
-  let ct_req_method = config.vsc_haf_url.clone() + "/get_contract_by_id?id=" + &address;
-  let ct_det = ctx.http_client
-    .get(ct_req_method.as_str())
-    .send().await
-    .map_err(|_| RespErr::VscHafErr)?
-    .json::<vsc_types::ContractById>().await
-    .map_err(|_| RespErr::VscHafErr)?;
-  if ct_det.error.is_some() {
-    // as of now only error this api could return is contract not found with status code 200
-    return Ok(HttpResponse::NotFound().json(json!(ct_det)));
+  let contract = ctx.vsc_db.contracts.find_one(doc! { "id": &address }).await.map_err(|e| RespErr::DbErr { msg: e.to_string() })?;
+  if contract.is_none() {
+    return Ok(HttpResponse::NotFound().json(json!({"error": "contract not found"})));
   }
+  let contract = contract.unwrap();
   let can_verify: String = ctx.db
     .query(
       "SELECT vsc_cv.can_verify_new($1,$2,$3);",
@@ -234,14 +229,14 @@ async fn verify_new(
   }
   // clear already uploaded source codes when the previous ones failed verification
   ctx.db
-    .query("DELETE FROM vsc_cv.source_code WHERE contract_addr=$1;", &[(&ct_det.contract_id, Type::VARCHAR)]).await
+    .query("DELETE FROM vsc_cv.source_code WHERE contract_addr=$1;", &[(&address, Type::VARCHAR)]).await
     .map_err(|e| RespErr::DbErr { msg: e.to_string() })?;
   ctx.db
     .query(
       "SELECT vsc_cv.verify_new($1,$2,$3,$4,$5,$6,$7);",
       &[
-        (&ct_det.contract_id, Type::VARCHAR),
-        (&ct_det.code, Type::VARCHAR),
+        (&address, Type::VARCHAR),
+        (&contract.code, Type::VARCHAR),
         (&username, Type::VARCHAR),
         (&Utc::now().naive_utc(), Type::TIMESTAMP),
         (&req_data.license, Type::VARCHAR),

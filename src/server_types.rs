@@ -12,7 +12,6 @@ pub enum RespErr {
   #[display("Unknown error occured when querying database")] DbErr {
     msg: String,
   },
-  #[display("Failed to query VSC-HAF backend")] VscHafErr,
   #[display("Missing access token in authentication header")] TokenMissing,
   #[display("Access token expired")] TokenExpired,
   #[display("Access token is invalid")] TokenInvalid,
@@ -50,7 +49,6 @@ impl actix_web::error::ResponseError for RespErr {
   fn status_code(&self) -> StatusCode {
     match *self {
       RespErr::DbErr { .. } => StatusCode::INTERNAL_SERVER_ERROR,
-      RespErr::VscHafErr => StatusCode::INTERNAL_SERVER_ERROR,
       RespErr::TokenMissing => StatusCode::UNAUTHORIZED,
       RespErr::TokenExpired => StatusCode::UNAUTHORIZED,
       RespErr::TokenInvalid => StatusCode::UNAUTHORIZED,

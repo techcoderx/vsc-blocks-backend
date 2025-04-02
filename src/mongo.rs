@@ -1,10 +1,11 @@
 use mongodb::{ options::ClientOptions, Client, Collection };
 use std::error::Error;
 use log::info;
-use crate::vsc_types::Witnesses;
+use crate::vsc_types::{ Contract, Witnesses };
 
 #[derive(Clone)]
 pub struct MongoDB {
+  pub contracts: Collection<Contract>,
   pub witnesses: Collection<Witnesses>,
 }
 
@@ -15,6 +16,7 @@ impl MongoDB {
     let db = client.database("go-vsc");
     info!("Connected to VSC MongoDB database successfully");
     Ok(MongoDB {
+      contracts: db.collection("contracts"),
       witnesses: db.collection("witnesses"),
     })
   }

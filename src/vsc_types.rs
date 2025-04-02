@@ -50,3 +50,15 @@ pub struct Witnesses {
   ts: String,
   version_id: String,
 }
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct Contract {
+  pub id: String,
+  pub code: String,
+  pub tx_id: String,
+  pub name: Option<String>,
+  pub description: Option<String>,
+  pub creator: String,
+  pub owner: String,
+  pub creation_height: i64,
+}
