@@ -9,9 +9,10 @@ mod config;
 mod constants;
 mod db;
 mod server_types;
-mod server;
+mod endpoints;
 mod vsc_types;
 mod compiler;
+use endpoints::cv_api;
 
 #[actix_web::main]
 async fn main() -> std::io::Result<()> {
@@ -58,18 +59,18 @@ async fn main() -> std::io::Result<()> {
       .service(
         web
           ::scope("/cv-api/v1")
-          .service(server::hello)
-          .service(server::login)
-          .service(server::verify_new)
-          .service(server::upload_file)
-          .service(server::upload_complete)
-          .service(server::list_langs)
-          .service(server::list_licenses)
-          .service(server::contract_info)
-          .service(server::contract_files_ls)
-          .service(server::contract_files_cat)
-          .service(server::contract_files_cat_all)
-          .service(server::bytecode_lookup_addr)
+          .service(cv_api::hello)
+          .service(cv_api::login)
+          .service(cv_api::verify_new)
+          .service(cv_api::upload_file)
+          .service(cv_api::upload_complete)
+          .service(cv_api::list_langs)
+          .service(cv_api::list_licenses)
+          .service(cv_api::contract_info)
+          .service(cv_api::contract_files_ls)
+          .service(cv_api::contract_files_cat)
+          .service(cv_api::contract_files_cat_all)
+          .service(cv_api::bytecode_lookup_addr)
       )
   })
     .bind((config.server.address.as_str(), config.server.port))?
