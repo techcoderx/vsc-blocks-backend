@@ -26,8 +26,18 @@ async fn props(ctx: web::Data<Context>) -> Result<HttpResponse, RespErr> {
     .map_err(|e| RespErr::DbErr { msg: e.to_string() })?
     .map(|d| d.get_i32("total").unwrap_or(0))
     .unwrap_or(0);
+  let epoch = ctx.vsc_db.elections
+    .find_one(doc! {})
+    .with_options(
+      FindOneOptions::builder()
+        .sort(doc! { "epoch": -1 })
+        .build()
+    ).await
+    .map_err(|e| RespErr::DbErr { msg: e.to_string() })?
+    .map(|epoch| epoch.epoch);
   Ok(HttpResponse::Ok().json(json!({
-    "witnesses": witness_count
+    "witnesses": witness_count,
+    "epoch": epoch
   })))
 }
 
