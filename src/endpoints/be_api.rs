@@ -34,24 +34,18 @@ async fn props(ctx: web::Data<Context>) -> Result<HttpResponse, RespErr> {
 #[get("/witnesses")]
 async fn list_witnesses(ctx: web::Data<Context>) -> Result<HttpResponse, RespErr> {
   let pipeline = vec![
-    // Sort by account (ascending) and height (descending)
-    doc! {
-      "$sort": doc! {
-        "account": 1,
-        "height": -1
-      }
-    },
-    // Group by account and keep first document (highest height)
-    doc! {
+    doc! { "$sort": { "account": 1, "height": -1 } },
+    doc! { 
       "$group": {
         "_id": "$account",
         "doc": { "$first": "$$ROOT" }
       }
     },
-    // Restore original document structure
-    doc! {
-      "$replaceRoot": {
-        "newRoot": "$doc"
+    doc! { "$replaceRoot": { "newRoot": "$doc" } },
+    // New projection stage to exclude _id
+    doc! { 
+      "$project": {
+        "_id": 0
       }
     }
   ];
