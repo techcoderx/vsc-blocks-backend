@@ -93,7 +93,7 @@ async fn login(payload: String, ctx: web::Data<Context>) -> Result<HttpResponse,
   hasher.update(&original);
   let hash = hex::encode(&hasher.finalize()[..]);
   let verify_req = ctx.http_client
-    .post(config.auth.hive_rpc.clone().unwrap())
+    .post(config.hive_rpc.clone().unwrap())
     .json::<Value>(
       &json!({
     "id": 1,
@@ -119,7 +119,7 @@ async fn login(payload: String, ctx: web::Data<Context>) -> Result<HttpResponse,
     return Err(RespErr::SigVerifyFail);
   }
   let head_block_num = ctx.http_client
-    .get(config.auth.hive_rpc.clone().unwrap() + "/hafah-api/headblock")
+    .get(config.hive_rpc.clone().unwrap() + "/hafah-api/headblock")
     .send().await
     .map_err(|_| RespErr::SigRecentBlkReqFail)?
     .json::<Number>().await
@@ -128,7 +128,7 @@ async fn login(payload: String, ctx: web::Data<Context>) -> Result<HttpResponse,
     return Err(RespErr::SigTooOld);
   }
   let dgp_at_block = ctx.http_client
-    .get(config.auth.hive_rpc.clone().unwrap() + "/hafah-api/global-state?block-num=" + &block_num.to_string())
+    .get(config.hive_rpc.clone().unwrap() + "/hafah-api/global-state?block-num=" + &block_num.to_string())
     .send().await
     .map_err(|_| RespErr::SigRecentBlkReqFail)?
     .json::<DgpAtBlock>().await
