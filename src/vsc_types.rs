@@ -65,90 +65,20 @@ pub struct Contract {
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct ElectionMember {
-  #[serde(rename = "key")]
   pub key: String,
-  #[serde(rename = "account")]
   pub account: String,
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
-pub struct ElectionCommonInfo {
-  #[serde(rename = "epoch")]
-  pub epoch: u64,
-  #[serde(rename = "net_id")]
-  pub net_id: String,
-  #[serde(rename = "type")]
-  pub r#type: String,
-}
-
-#[derive(Serialize, Deserialize, Debug, Clone)]
-pub struct ElectionHeaderInfo {
-  #[serde(rename = "data")]
-  pub data: String,
-}
-
-#[derive(Serialize, Deserialize, Debug, Clone)]
-pub struct ElectionHeader {
-  #[serde(flatten)]
-  pub common: ElectionCommonInfo,
-  #[serde(flatten)]
-  pub header_info: ElectionHeaderInfo,
-}
-
-#[derive(Serialize, Deserialize, Debug, Clone)]
-pub struct ElectionDataInfo {
-  #[serde(rename = "members")]
-  pub members: Vec<ElectionMember>,
-  #[serde(rename = "weights")]
-  pub weights: Vec<u64>,
-  #[serde(rename = "protocol_version")]
-  pub protocol_version: u64,
-}
-
-#[derive(Serialize, Deserialize, Debug, Clone)]
-pub struct ElectionData {
-  #[serde(flatten)]
-  pub common: ElectionCommonInfo,
-  #[serde(flatten)]
-  pub data_info: ElectionDataInfo,
-}
-
-#[derive(Serialize, Deserialize, Debug, Clone)]
-pub struct ElectionResult {
-  #[serde(flatten)]
-  pub common: ElectionCommonInfo,
-  #[serde(flatten)]
-  pub header_info: ElectionHeaderInfo,
-  #[serde(flatten)]
-  pub data_info: ElectionDataInfo,
-
-  #[serde(rename = "total_weight")]
-  pub total_weight: u64,
-  #[serde(rename = "block_height")]
-  pub block_height: u64,
-  #[serde(rename = "proposer")]
-  pub proposer: String,
-}
-
-#[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct ElectionResultRecord {
-  #[serde(rename = "epoch")]
   pub epoch: u64,
-  #[serde(rename = "net_id")]
   pub net_id: String,
-  #[serde(rename = "data")]
   pub data: String,
-  #[serde(rename = "members")]
   pub members: Vec<ElectionMember>,
-  #[serde(rename = "weights")]
   pub weights: Vec<u64>,
-  #[serde(rename = "protocol_version")]
   pub protocol_version: u64,
-  #[serde(rename = "total_weight")]
   pub total_weight: u64,
-  #[serde(rename = "block_height")]
   pub block_height: u64,
-  #[serde(rename = "proposer")]
   pub proposer: String,
   #[serde(rename = "type")]
   pub r#type: String,
