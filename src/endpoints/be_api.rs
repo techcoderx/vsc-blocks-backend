@@ -79,7 +79,7 @@ async fn get_witness(path: web::Path<String>, ctx: web::Data<Context>) -> Result
   if wit.is_none() {
     return Ok(HttpResponse::NotFound().json(json!({"error": "witness does not exist"})));
   }
-  return Ok(HttpResponse::Ok().json(wit.unwrap()));
+  Ok(HttpResponse::Ok().json(wit.unwrap()))
 }
 
 #[derive(Debug, Deserialize)]
@@ -116,4 +116,19 @@ async fn list_epochs(params: web::Query<ListEpochOpts>, ctx: web::Data<Context>)
 
   // Return the JSON array
   Ok(HttpResponse::Ok().json(json_results))
+}
+
+#[get("/epoch/{epoch}")]
+async fn get_epoch(path: web::Path<String>, ctx: web::Data<Context>) -> Result<HttpResponse, RespErr> {
+  let epoch_num = path.into_inner().parse::<i32>();
+  if epoch_num.is_err() {
+    return Err(RespErr::BadRequest { msg: String::from("Invalid epoch number") });
+  }
+  let epoch = ctx.vsc_db.elections
+    .find_one(doc! { "epoch": epoch_num.unwrap() }).await
+    .map_err(|e| RespErr::DbErr { msg: e.to_string() })?;
+  if epoch.is_none() {
+    return Ok(HttpResponse::NotFound().json(json!({"error": "epoch does not exist"})));
+  }
+  Ok(HttpResponse::Ok().json(epoch.unwrap()))
 }
