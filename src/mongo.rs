@@ -1,11 +1,12 @@
 use mongodb::{ options::ClientOptions, Client, Collection };
 use std::error::Error;
 use log::info;
-use crate::vsc_types::{ Contract, Witnesses };
+use crate::vsc_types::{ Contract, ElectionResultRecord, Witnesses };
 
 #[derive(Clone)]
 pub struct MongoDB {
   pub contracts: Collection<Contract>,
+  pub elections: Collection<ElectionResultRecord>,
   pub witnesses: Collection<Witnesses>,
 }
 
@@ -17,6 +18,7 @@ impl MongoDB {
     info!("Connected to VSC MongoDB database successfully");
     Ok(MongoDB {
       contracts: db.collection("contracts"),
+      elections: db.collection("elections"),
       witnesses: db.collection("witnesses"),
     })
   }

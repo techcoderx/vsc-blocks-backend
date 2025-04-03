@@ -1,7 +1,9 @@
 use actix_web::{ get, web, HttpResponse, Responder };
 use futures_util::StreamExt;
-use mongodb::bson::doc;
+use mongodb::{ bson::doc, options::{ FindOneOptions, FindOptions } };
+use serde::Deserialize;
 use serde_json::json;
+use std::cmp::max;
 use crate::server_types::{ Context, RespErr };
 
 #[get("")]
@@ -61,6 +63,58 @@ async fn list_witnesses(ctx: web::Data<Context>) -> Result<HttpResponse, RespErr
   }
 
   // Convert each MongoDB document to serde_json::Value
+  let json_results = results
+    .into_iter()
+    .map(|doc| serde_json::to_value(doc).map_err(|e| RespErr::DbErr { msg: e.to_string() }))
+    .collect::<Result<Vec<_>, _>>()?;
+
+  // Return the JSON array
+  Ok(HttpResponse::Ok().json(json_results))
+}
+
+#[get("/witness/{username}")]
+async fn get_witness(path: web::Path<String>, ctx: web::Data<Context>) -> Result<HttpResponse, RespErr> {
+  let user = path.into_inner();
+  let opt = FindOneOptions::builder()
+    .sort(doc! { "height": -1 })
+    .build();
+  let wit = ctx.vsc_db.witnesses
+    .find_one(doc! { "account": &user })
+    .with_options(opt).await
+    .map_err(|e| RespErr::DbErr { msg: e.to_string() })?;
+  if wit.is_none() {
+    return Ok(HttpResponse::NotFound().json(json!({"error": "witness does not exist"})));
+  }
+  return Ok(HttpResponse::Ok().json(wit.unwrap()));
+}
+
+#[derive(Debug, Deserialize)]
+struct ListEpochOpts {
+  last_epoch: Option<i64>,
+  count: Option<i64>,
+}
+
+#[get("/epochs")]
+async fn list_epochs(params: web::Query<ListEpochOpts>, ctx: web::Data<Context>) -> Result<HttpResponse, RespErr> {
+  let last_epoch = params.last_epoch;
+  let count = max(params.count.unwrap_or(100), 100);
+  let opt = FindOptions::builder()
+    .sort(doc! { "epoch": -1 })
+    .build();
+  let filter = match last_epoch.is_some() {
+    true => doc! { "epoch": doc! {"$lte": last_epoch.unwrap()} },
+    false => doc! {},
+  };
+  let mut epochs_cursor = ctx.vsc_db.elections
+    .find(filter)
+    .with_options(opt)
+    .limit(count).await
+    .map_err(|e| RespErr::DbErr { msg: e.to_string() })?;
+  let mut results = Vec::new();
+  while let Some(doc) = epochs_cursor.next().await {
+    results.push(doc.unwrap());
+  }
+
   let json_results = results
     .into_iter()
     .map(|doc| serde_json::to_value(doc).map_err(|e| RespErr::DbErr { msg: e.to_string() }))

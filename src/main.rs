@@ -80,7 +80,15 @@ async fn main() -> std::io::Result<()> {
           .service(cv_api::contract_files_cat_all)
           .service(cv_api::bytecode_lookup_addr)
       )
-      .service(web::scope("/be-api/v1").service(be_api::hello).service(be_api::props).service(be_api::list_witnesses))
+      .service(
+        web
+          ::scope("/be-api/v1")
+          .service(be_api::hello)
+          .service(be_api::props)
+          .service(be_api::list_witnesses)
+          .service(be_api::get_witness)
+          .service(be_api::list_epochs)
+      )
   })
     .bind((config.server.address.as_str(), config.server.port))?
     .run().await
