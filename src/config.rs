@@ -41,7 +41,7 @@ pub struct TomlConfig {
   pub log_level: Option<String>,
   pub psql_url: String,
   pub mongo_url: String,
-  pub hive_rpc: Option<String>,
+  pub hive_rpc: String,
   pub auth: AuthConf,
   pub server: ServerConfig,
   pub ascompiler: ASCompilerConf,
@@ -63,7 +63,7 @@ impl TomlConfig {
       log_level: Some(String::from("info")),
       psql_url: String::from("postgres://postgres:mysecretpassword@127.0.0.1:5432/postgres"),
       mongo_url: String::from("mongodb://localhost:27017"),
-      hive_rpc: Some(String::from("https://techcoderx.com")),
+      hive_rpc: String::from("https://techcoderx.com"),
       auth: AuthConf {
         enabled: true,
         id: Some(String::from("vsc_cv_login")),
