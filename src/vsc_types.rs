@@ -63,6 +63,12 @@ pub struct Contract {
   pub creation_height: i64,
 }
 
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct Signature {
+  pub sig: String,
+  pub bv: String,
+}
+
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct ElectionMember {
   pub key: String,
@@ -82,4 +88,15 @@ pub struct ElectionResultRecord {
   pub proposer: String,
   #[serde(rename = "type")]
   pub r#type: String,
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct ElectionExt {
+  #[serde(rename = "_id")]
+  pub epoch: u64,
+  pub ts: String,
+  pub trx_id: String,
+  pub signature: Option<Signature>,
+  pub voted_weight: u64,
+  pub eligible_weight: u64,
 }

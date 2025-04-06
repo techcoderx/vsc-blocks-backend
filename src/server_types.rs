@@ -21,6 +21,9 @@ pub enum RespErr {
   #[display("Signature is too old")] SigTooOld,
   #[display("Block hash does not match the corresponding block number")] SigBhNotMatch,
   #[display("Failed to generate access token")] TokenGenFail,
+  #[display("{msg}")] InternalErr {
+    msg: String,
+  },
   #[display("{msg}")] BadRequest {
     msg: String,
   },
@@ -58,6 +61,7 @@ impl actix_web::error::ResponseError for RespErr {
       RespErr::SigTooOld => StatusCode::UNAUTHORIZED,
       RespErr::SigBhNotMatch => StatusCode::UNAUTHORIZED,
       RespErr::TokenGenFail => StatusCode::INTERNAL_SERVER_ERROR,
+      RespErr::InternalErr { .. } => StatusCode::INTERNAL_SERVER_ERROR,
       RespErr::BadRequest { .. } => StatusCode::BAD_REQUEST,
     }
   }

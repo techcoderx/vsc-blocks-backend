@@ -4,7 +4,7 @@ use mongodb::{ bson::doc, options::{ FindOneOptions, FindOptions } };
 use serde::Deserialize;
 use serde_json::json;
 use std::cmp::max;
-use crate::server_types::{ Context, RespErr };
+use crate::{ endpoints::inference::{ combine_inferred_epoch, infer_epoch }, server_types::{ Context, RespErr } };
 
 #[get("")]
 async fn hello() -> impl Responder {
@@ -105,9 +105,9 @@ async fn list_epochs(params: web::Query<ListEpochOpts>, ctx: web::Data<Context>)
   let opt = FindOptions::builder()
     .sort(doc! { "epoch": -1 })
     .build();
-  let filter = match last_epoch.is_some() {
-    true => doc! { "epoch": doc! {"$lte": last_epoch.unwrap()} },
-    false => doc! {},
+  let filter = match last_epoch {
+    Some(le) => doc! { "epoch": doc! {"$lte": le} },
+    None => doc! {},
   };
   let mut epochs_cursor = ctx.vsc_db.elections
     .find(filter)
@@ -116,29 +116,33 @@ async fn list_epochs(params: web::Query<ListEpochOpts>, ctx: web::Data<Context>)
     .map_err(|e| RespErr::DbErr { msg: e.to_string() })?;
   let mut results = Vec::new();
   while let Some(doc) = epochs_cursor.next().await {
-    results.push(doc.unwrap());
+    let doc = doc.unwrap();
+    let inferred = infer_epoch(&ctx.http_client, &ctx.vsc_db.elections2, &doc).await.map_err(|e| RespErr::InternalErr {
+      msg: e.to_string(),
+    })?;
+    results.push(combine_inferred_epoch(&doc, &inferred));
   }
 
-  let json_results = results
-    .into_iter()
-    .map(|doc| serde_json::to_value(doc).map_err(|e| RespErr::DbErr { msg: e.to_string() }))
-    .collect::<Result<Vec<_>, _>>()?;
-
   // Return the JSON array
-  Ok(HttpResponse::Ok().json(json_results))
+  Ok(HttpResponse::Ok().json(results))
 }
 
 #[get("/epoch/{epoch}")]
 async fn get_epoch(path: web::Path<String>, ctx: web::Data<Context>) -> Result<HttpResponse, RespErr> {
-  let epoch_num = path.into_inner().parse::<i32>();
-  if epoch_num.is_err() {
-    return Err(RespErr::BadRequest { msg: String::from("Invalid epoch number") });
-  }
+  let epoch_num = path
+    .into_inner()
+    .parse::<i32>()
+    .map_err(|_| RespErr::BadRequest { msg: String::from("Invalid epoch number") })?;
   let epoch = ctx.vsc_db.elections
-    .find_one(doc! { "epoch": epoch_num.unwrap() }).await
+    .find_one(doc! { "epoch": epoch_num }).await
     .map_err(|e| RespErr::DbErr { msg: e.to_string() })?;
-  if epoch.is_none() {
-    return Ok(HttpResponse::NotFound().json(json!({"error": "epoch does not exist"})));
+  match epoch {
+    Some(ep) => {
+      let inferred = infer_epoch(&ctx.http_client, &ctx.vsc_db.elections2, &ep).await.map_err(|e| RespErr::InternalErr {
+        msg: e.to_string(),
+      })?;
+      Ok(HttpResponse::Ok().json(combine_inferred_epoch(&ep, &inferred)))
+    }
+    None => Ok(HttpResponse::NotFound().json(json!({"error": "epoch does not exist"}))),
   }
-  Ok(HttpResponse::Ok().json(epoch.unwrap()))
 }

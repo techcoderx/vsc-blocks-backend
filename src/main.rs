@@ -12,6 +12,7 @@ mod mongo;
 mod server_types;
 mod endpoints;
 mod vsc_types;
+mod hive_types;
 mod compiler;
 use endpoints::{ be_api, cv_api };
 
