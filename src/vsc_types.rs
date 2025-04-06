@@ -1,5 +1,15 @@
 use serde::{ Serialize, Deserialize };
 
+#[derive(Clone, Debug, Deserialize)]
+pub struct HiveBlocksSyncState {
+  pub last_processed_block: u64,
+}
+
+#[derive(Clone, Debug, Deserialize)]
+pub struct HafProps {
+  pub operations: u32,
+}
+
 #[derive(Debug, Serialize, Deserialize)]
 pub struct DIDKey {
   ct: String,
@@ -71,4 +81,59 @@ pub struct ElectionExt {
   pub signature: Option<Signature>,
   pub voted_weight: u64,
   pub eligible_weight: u64,
+}
+
+#[derive(Serialize, Deserialize, Debug, Clone)]
+pub struct BlockStat {
+  pub size: u64,
+}
+
+#[derive(Serialize, Deserialize, Debug, Clone)]
+pub struct BlockHeaderRecord {
+  pub id: String,
+  pub block: String,
+  pub end_block: u32,
+  pub merkle_root: String,
+  pub proposer: String,
+  pub sig_root: String,
+  pub signers: String,
+  pub slot_height: u32,
+  pub start_block: u32,
+  pub stats: BlockStat,
+  pub ts: String,
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct TransactionRecord {
+  #[serde(rename = "id")]
+  pub id: String,
+  pub status: String,
+  #[serde(rename = "required_auths")]
+  pub required_auths: Vec<String>,
+  pub nonce: i64,
+  #[serde(rename = "rc_limit")]
+  pub rc_limit: u64,
+  #[serde(rename = "type")]
+  pub type_: String,
+  #[serde(rename = "__v")]
+  pub version: String,
+  // pub data: Document,
+  #[serde(rename = "anchr_block")]
+  pub anchored_block: String,
+  #[serde(rename = "anchr_id")]
+  pub anchored_id: String,
+  #[serde(rename = "anchr_index")]
+  pub anchored_index: i64,
+  #[serde(rename = "anchr_opidx")]
+  pub anchored_opidx: i64,
+  // #[serde(rename = "first_seen")]
+  // pub first_seen: DateTime<Utc>,
+  pub output: Option<Output>,
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct Output {
+  #[serde(rename = "id")]
+  pub id: String,
+  pub index: i64,
 }

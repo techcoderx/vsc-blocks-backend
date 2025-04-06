@@ -4,7 +4,12 @@ use mongodb::{ bson::doc, options::{ FindOneOptions, FindOptions } };
 use serde::Deserialize;
 use serde_json::json;
 use std::cmp::max;
-use crate::{ endpoints::inference::{ combine_inferred_epoch, infer_epoch }, server_types::{ Context, RespErr } };
+use crate::{
+  config::config,
+  endpoints::inference::{ combine_inferred_epoch, infer_epoch },
+  server_types::{ Context, RespErr },
+  vsc_types::HafProps,
+};
 
 #[get("")]
 async fn hello() -> impl Responder {
@@ -26,19 +31,38 @@ async fn props(ctx: web::Data<Context>) -> Result<HttpResponse, RespErr> {
     .map_err(|e| RespErr::DbErr { msg: e.to_string() })?
     .map(|d| d.get_i32("total").unwrap_or(0))
     .unwrap_or(0);
-  let epoch = ctx.vsc_db.elections
-    .find_one(doc! {})
-    .with_options(
-      FindOneOptions::builder()
-        .sort(doc! { "epoch": -1 })
-        .build()
-    ).await
-    .map_err(|e| RespErr::DbErr { msg: e.to_string() })?
-    .map(|epoch| epoch.epoch);
-  Ok(HttpResponse::Ok().json(json!({
-    "witnesses": witness_count,
-    "epoch": epoch
-  })))
+  let contracts = ctx.vsc_db.contracts.estimated_document_count().await.map_err(|e| RespErr::DbErr { msg: e.to_string() })?;
+  let epoch = ctx.vsc_db.elections.estimated_document_count().await.map_err(|e| RespErr::DbErr { msg: e.to_string() })?;
+  let block_count = ctx.vsc_db.blocks.estimated_document_count().await.map_err(|e| RespErr::DbErr { msg: e.to_string() })?;
+  let last_l1_block = match
+    ctx.vsc_db.l1_blocks.find_one(doc! { "type": "metadata" }).await.map_err(|e| RespErr::DbErr { msg: e.to_string() })?
+  {
+    Some(state) => state.last_processed_block,
+    None => 0,
+  };
+  let l1_ops = match config.haf_url.clone() {
+    Some(haf_url) => {
+      match ctx.http_client.get(format!("{}/be-api/v1/haf", haf_url)).send().await {
+        Ok(req) => req.json::<HafProps>().await.unwrap_or(HafProps { operations: 0 }).operations,
+        Err(_) => 0,
+      }
+    }
+    None => 0,
+  };
+  let tx_count = ctx.vsc_db.tx_pool.estimated_document_count().await.map_err(|e| RespErr::DbErr { msg: e.to_string() })?;
+  Ok(
+    HttpResponse::Ok().json(
+      json!({
+        "last_processed_block": last_l1_block,
+        "l2_block_height": block_count,
+        "witnesses": witness_count,
+        "epoch": epoch-1,
+        "contracts": contracts,
+        "operations": l1_ops,
+        "transactions": tx_count
+      })
+    )
+  )
 }
 
 #[get("/witnesses")]
