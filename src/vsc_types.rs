@@ -5,11 +5,6 @@ pub struct HiveBlocksSyncState {
   pub head_height: u64,
 }
 
-#[derive(Clone, Debug, Deserialize)]
-pub struct HafProps {
-  pub operations: u32,
-}
-
 #[derive(Clone, Serialize, Deserialize)]
 pub struct LedgerBalance {
   pub account: String,
@@ -20,6 +15,13 @@ pub struct LedgerBalance {
   pub hbd_savings: u64,
   pub hive: u64,
   pub hive_consensus: u64,
+  pub rc_used: Option<RcUsedAtHeight>,
+}
+
+#[derive(Clone, Serialize, Deserialize)]
+pub struct RcUsedAtHeight {
+  pub block_height: u64,
+  pub amount: u64,
 }
 
 #[derive(Debug, Serialize, Deserialize)]

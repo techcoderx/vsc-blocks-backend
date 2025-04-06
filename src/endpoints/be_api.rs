@@ -5,10 +5,9 @@ use serde::Deserialize;
 use serde_json::json;
 use std::cmp::{ min, max };
 use crate::{
-  config::config,
   endpoints::inference::{ combine_inferred_epoch, infer_epoch },
   server_types::{ Context, RespErr },
-  vsc_types::{ HafProps, LedgerBalance },
+  vsc_types::{ LedgerBalance, RcUsedAtHeight },
 };
 
 #[get("")]
@@ -40,15 +39,6 @@ async fn props(ctx: web::Data<Context>) -> Result<HttpResponse, RespErr> {
     Some(state) => state.head_height,
     None => 0,
   };
-  let l1_ops = match config.haf_url.clone() {
-    Some(haf_url) => {
-      match ctx.http_client.get(format!("{}/be-api/v1/haf", haf_url)).send().await {
-        Ok(req) => req.json::<HafProps>().await.unwrap_or(HafProps { operations: 0 }).operations,
-        Err(_) => 0,
-      }
-    }
-    None => 0,
-  };
   let tx_count = ctx.vsc_db.tx_pool.estimated_document_count().await.map_err(|e| RespErr::DbErr { msg: e.to_string() })?;
   Ok(
     HttpResponse::Ok().json(
@@ -58,7 +48,6 @@ async fn props(ctx: web::Data<Context>) -> Result<HttpResponse, RespErr> {
         "witnesses": witness_count,
         "epoch": epoch.saturating_sub(1),
         "contracts": contracts,
-        "operations": l1_ops,
         "transactions": tx_count
       })
     )
@@ -119,27 +108,32 @@ async fn get_balance(path: web::Path<String>, ctx: web::Data<Context>) -> Result
   let opt = FindOneOptions::builder()
     .sort(doc! { "block_height": -1 })
     .build();
-  match
-    ctx.vsc_db.balances
-      .find_one(doc! { "account": &user })
-      .with_options(opt).await
+  let mut bal = ctx.vsc_db.balances
+    .find_one(doc! { "account": user.clone() })
+    .with_options(opt.clone()).await
+    .map_err(|e| RespErr::DbErr { msg: e.to_string() })?
+    .unwrap_or(LedgerBalance {
+      account: user.clone(),
+      block_height: 0,
+      hbd: 0,
+      hbd_avg: 0,
+      hbd_modify: 0,
+      hbd_savings: 0,
+      hive: 0,
+      hive_consensus: 0,
+      rc_used: None,
+    });
+  bal.rc_used = Some(
+    ctx.vsc_db.rc
+      .find_one(doc! { "account": user.clone() })
+      .with_options(opt.clone()).await
       .map_err(|e| RespErr::DbErr { msg: e.to_string() })?
-  {
-    Some(bal) => Ok(HttpResponse::Ok().json(bal)),
-    None =>
-      Ok(
-        HttpResponse::NotFound().json(LedgerBalance {
-          account: user,
-          block_height: 0,
-          hbd: 0,
-          hbd_avg: 0,
-          hbd_modify: 0,
-          hbd_savings: 0,
-          hive: 0,
-          hive_consensus: 0,
-        })
-      ),
-  }
+      .unwrap_or(RcUsedAtHeight {
+        block_height: 0,
+        amount: 0,
+      })
+  );
+  Ok(HttpResponse::Ok().json(bal))
 }
 
 #[derive(Debug, Deserialize)]
