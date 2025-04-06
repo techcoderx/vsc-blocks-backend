@@ -8,7 +8,7 @@ use crate::{
   config::config,
   endpoints::inference::{ combine_inferred_epoch, infer_epoch },
   server_types::{ Context, RespErr },
-  vsc_types::HafProps,
+  vsc_types::{ HafProps, LedgerBalance },
 };
 
 #[get("")]
@@ -110,6 +110,35 @@ async fn get_witness(path: web::Path<String>, ctx: web::Data<Context>) -> Result
   {
     Some(wit) => Ok(HttpResponse::Ok().json(wit)),
     None => Ok(HttpResponse::NotFound().json(json!({"error": "witness does not exist"}))),
+  }
+}
+
+#[get("/balance/{username}")]
+async fn get_balance(path: web::Path<String>, ctx: web::Data<Context>) -> Result<HttpResponse, RespErr> {
+  let user = path.into_inner(); // must be prefixed by hive: or did: (!)
+  let opt = FindOneOptions::builder()
+    .sort(doc! { "block_height": -1 })
+    .build();
+  match
+    ctx.vsc_db.balances
+      .find_one(doc! { "account": &user })
+      .with_options(opt).await
+      .map_err(|e| RespErr::DbErr { msg: e.to_string() })?
+  {
+    Some(bal) => Ok(HttpResponse::Ok().json(bal)),
+    None =>
+      Ok(
+        HttpResponse::NotFound().json(LedgerBalance {
+          account: user,
+          block_height: 0,
+          hbd: 0,
+          hbd_avg: 0,
+          hbd_modify: 0,
+          hbd_savings: 0,
+          hive: 0,
+          hive_consensus: 0,
+        })
+      ),
   }
 }
 

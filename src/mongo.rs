@@ -7,6 +7,7 @@ use crate::vsc_types::{
   ElectionExt,
   ElectionResultRecord,
   HiveBlocksSyncState,
+  LedgerBalance,
   TransactionRecord,
   Witnesses,
 };
@@ -19,6 +20,7 @@ pub struct MongoDB {
   pub blocks: Collection<BlockHeaderRecord>,
   pub l1_blocks: Collection<HiveBlocksSyncState>,
   pub tx_pool: Collection<TransactionRecord>,
+  pub balances: Collection<LedgerBalance>,
   pub elections2: Collection<ElectionExt>,
 }
 
@@ -36,6 +38,7 @@ impl MongoDB {
       blocks: db.collection("block_headers"),
       l1_blocks: db.collection("hive_blocks"),
       tx_pool: db.collection("transaction_pool"),
+      balances: db.collection("ledger_balances"),
       elections2: db2.collection("elections2"),
     })
   }

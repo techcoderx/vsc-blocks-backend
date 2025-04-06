@@ -10,6 +10,18 @@ pub struct HafProps {
   pub operations: u32,
 }
 
+#[derive(Clone, Serialize, Deserialize)]
+pub struct LedgerBalance {
+  pub account: String,
+  pub block_height: u64,
+  pub hbd: u64,
+  pub hbd_avg: u64,
+  pub hbd_modify: u64,
+  pub hbd_savings: u64,
+  pub hive: u64,
+  pub hive_consensus: u64,
+}
+
 #[derive(Debug, Serialize, Deserialize)]
 pub struct DIDKey {
   ct: String,
