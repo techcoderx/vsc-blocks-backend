@@ -63,17 +63,13 @@ async fn list_witnesses(ctx: web::Data<Context>) -> Result<HttpResponse, RespErr
   let mut cursor = ctx.vsc_db.witnesses.aggregate(pipeline).await.map_err(|e| RespErr::DbErr { msg: e.to_string() })?;
   let mut results = Vec::new();
   while let Some(doc) = cursor.next().await {
-    results.push(doc.unwrap());
+    results.push(
+      serde_json
+        ::to_value(doc.map_err(|e| RespErr::DbErr { msg: e.to_string() })?)
+        .map_err(|e| RespErr::DbErr { msg: e.to_string() })?
+    );
   }
-
-  // Convert each MongoDB document to serde_json::Value
-  let json_results = results
-    .into_iter()
-    .map(|doc| serde_json::to_value(doc).map_err(|e| RespErr::DbErr { msg: e.to_string() }))
-    .collect::<Result<Vec<_>, _>>()?;
-
-  // Return the JSON array
-  Ok(HttpResponse::Ok().json(json_results))
+  Ok(HttpResponse::Ok().json(results))
 }
 
 #[get("/witness/{username}")]
@@ -82,14 +78,15 @@ async fn get_witness(path: web::Path<String>, ctx: web::Data<Context>) -> Result
   let opt = FindOneOptions::builder()
     .sort(doc! { "height": -1 })
     .build();
-  let wit = ctx.vsc_db.witnesses
-    .find_one(doc! { "account": &user })
-    .with_options(opt).await
-    .map_err(|e| RespErr::DbErr { msg: e.to_string() })?;
-  if wit.is_none() {
-    return Ok(HttpResponse::NotFound().json(json!({"error": "witness does not exist"})));
+  match
+    ctx.vsc_db.witnesses
+      .find_one(doc! { "account": &user })
+      .with_options(opt).await
+      .map_err(|e| RespErr::DbErr { msg: e.to_string() })?
+  {
+    Some(wit) => Ok(HttpResponse::Ok().json(wit)),
+    None => Ok(HttpResponse::NotFound().json(json!({"error": "witness does not exist"}))),
   }
-  Ok(HttpResponse::Ok().json(wit.unwrap()))
 }
 
 #[derive(Debug, Deserialize)]
