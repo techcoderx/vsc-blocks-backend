@@ -11,9 +11,9 @@ use sha2::{ Sha256, Digest };
 use jsonwebtoken::{ Header, EncodingKey, DecodingKey, Algorithm, Validation, errors::ErrorKind };
 use log::{ error, debug };
 use std::io::Read;
-use crate::{ constants::*, vsc_types::DgpAtBlock };
+use crate::constants::*;
 use crate::server_types::{ Context, RespErr };
-use crate::vsc_types;
+use crate::hive_types::{ JsonRpcResp, DgpAtBlock };
 use crate::config::config;
 
 #[get("")]
@@ -111,7 +111,7 @@ async fn login(payload: String, ctx: web::Data<Context>) -> Result<HttpResponse,
     )
     .send().await
     .map_err(|_| RespErr::SigVerifyReqFail)?
-    .json::<vsc_types::JsonRpcResp>().await
+    .json::<JsonRpcResp>().await
     .map_err(|_| RespErr::SigVerifyReqFail)?;
   let is_valid =
     !verify_req.error.is_some() && verify_req.result.is_some() && verify_req.result.unwrap().clone()["valid"].as_bool().unwrap();
