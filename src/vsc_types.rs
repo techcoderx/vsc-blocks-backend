@@ -2,7 +2,7 @@ use serde::{ Serialize, Deserialize };
 
 #[derive(Clone, Debug, Deserialize)]
 pub struct HiveBlocksSyncState {
-  pub last_processed_block: u64,
+  pub head_height: u64,
 }
 
 #[derive(Clone, Debug, Deserialize)]
@@ -126,6 +126,8 @@ pub struct TransactionRecord {
   pub anchored_index: i64,
   #[serde(rename = "anchr_opidx")]
   pub anchored_opidx: i64,
+  #[serde(rename = "anchr_height")]
+  pub anchored_height: u64,
   // #[serde(rename = "first_seen")]
   // pub first_seen: DateTime<Utc>,
   pub output: Option<Output>,

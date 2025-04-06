@@ -3,7 +3,7 @@ use futures_util::StreamExt;
 use mongodb::{ bson::doc, options::{ FindOneOptions, FindOptions } };
 use serde::Deserialize;
 use serde_json::json;
-use std::cmp::max;
+use std::cmp::{ min, max };
 use crate::{
   config::config,
   endpoints::inference::{ combine_inferred_epoch, infer_epoch },
@@ -37,7 +37,7 @@ async fn props(ctx: web::Data<Context>) -> Result<HttpResponse, RespErr> {
   let last_l1_block = match
     ctx.vsc_db.l1_blocks.find_one(doc! { "type": "metadata" }).await.map_err(|e| RespErr::DbErr { msg: e.to_string() })?
   {
-    Some(state) => state.last_processed_block,
+    Some(state) => state.head_height,
     None => 0,
   };
   let l1_ops = match config.haf_url.clone() {
@@ -56,7 +56,7 @@ async fn props(ctx: web::Data<Context>) -> Result<HttpResponse, RespErr> {
         "last_processed_block": last_l1_block,
         "l2_block_height": block_count,
         "witnesses": witness_count,
-        "epoch": epoch-1,
+        "epoch": epoch.saturating_sub(1),
         "contracts": contracts,
         "operations": l1_ops,
         "transactions": tx_count
@@ -122,7 +122,7 @@ struct ListEpochOpts {
 #[get("/epochs")]
 async fn list_epochs(params: web::Query<ListEpochOpts>, ctx: web::Data<Context>) -> Result<HttpResponse, RespErr> {
   let last_epoch = params.last_epoch;
-  let count = max(params.count.unwrap_or(100), 100);
+  let count = min(1, max(params.count.unwrap_or(100), 100));
   let opt = FindOptions::builder()
     .sort(doc! { "epoch": -1 })
     .build();
@@ -143,8 +143,6 @@ async fn list_epochs(params: web::Query<ListEpochOpts>, ctx: web::Data<Context>)
     })?;
     results.push(combine_inferred_epoch(&doc, &inferred));
   }
-
-  // Return the JSON array
   Ok(HttpResponse::Ok().json(results))
 }
 
