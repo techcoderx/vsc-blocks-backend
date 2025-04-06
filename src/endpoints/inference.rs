@@ -38,7 +38,6 @@ pub async fn infer_epoch(
 ) -> Result<ElectionExt, InferError> {
   let epoch = epoch.clone();
   let elections2 = elections2.clone();
-  let block_height = epoch.block_height;
   let stored = elections2
     .find_one(doc! { "_id": epoch.epoch as i64 }).await
     .map_err(|_| InferError { message: String::from(DB_ERR) })?;
@@ -51,7 +50,7 @@ pub async fn infer_epoch(
       format!(
         "{}/hafah-api/blocks/{}/operations?operation-types=18&page=1&page-size=2000&page-order=asc&data-size-limit=2000000&path-filter=value.id%3Dvsc.election_result",
         config.hive_rpc.clone(),
-        block_height.to_string()
+        epoch.block_height.to_string()
       )
     )
     .send().await
@@ -81,7 +80,7 @@ pub async fn infer_epoch(
         if net_id_valid && data_match && epoch_num_match {
           let _ = elections2
             .update_one(
-              doc! { "_id": epoch.epoch as i64 },
+              doc! { "_id": epoch.epoch as i32 },
               doc! {
                 "$set": doc! {
                   "ts": op.timestamp.clone(),
@@ -127,6 +126,7 @@ pub fn combine_inferred_epoch(original: &ElectionResultRecord, inferred: &Electi
     "trx_id": inferred.trx_id,
     "ts": inferred.ts,
     "type": original.r#type,
+    "signature": inferred.signature,
     "eligible_weight": inferred.eligible_weight,
     "voted_weight": inferred.voted_weight
   })
