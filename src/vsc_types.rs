@@ -15,7 +15,22 @@ pub struct LedgerBalance {
   pub hbd_savings: u64,
   pub hive: u64,
   pub hive_consensus: u64,
+  pub hive_unstaking: Option<i64>,
   pub rc_used: Option<RcUsedAtHeight>,
+}
+
+#[derive(Clone, Serialize, Deserialize)]
+pub struct LedgerActions {
+  pub id: String,
+  pub amount: u64,
+  pub asset: String,
+  pub block_height: u64,
+  // pub  data: { epoch: 5 },
+  pub memo: String,
+  pub status: String,
+  pub to: String,
+  #[serde(rename = "type")]
+  pub r#type: String,
 }
 
 #[derive(Clone, Serialize, Deserialize)]

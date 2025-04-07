@@ -1,6 +1,6 @@
 use actix_web::{ get, web, HttpResponse, Responder };
 use futures_util::StreamExt;
-use mongodb::{ bson::doc, options::{ FindOneOptions, FindOptions } };
+use mongodb::{ bson::{ doc, Bson }, options::{ FindOneOptions, FindOptions } };
 use serde::Deserialize;
 use serde_json::json;
 use std::cmp::{ min, max };
@@ -121,6 +121,7 @@ async fn get_balance(path: web::Path<String>, ctx: web::Data<Context>) -> Result
       hbd_savings: 0,
       hive: 0,
       hive_consensus: 0,
+      hive_unstaking: None,
       rc_used: None,
     });
   bal.rc_used = Some(
@@ -132,6 +133,31 @@ async fn get_balance(path: web::Path<String>, ctx: web::Data<Context>) -> Result
         block_height: 0,
         amount: 0,
       })
+  );
+  let unstaking_pipeline = vec![
+    doc! {
+      "$match": doc! {
+        "to": user.clone(),
+        "status": "pending"
+      }
+    },
+    doc! {
+      "$group": doc! {
+        "_id": Bson::Null,
+        "totalAmount": doc! {"$sum": "$amount"}
+      }
+    }
+  ];
+  let mut unstaking_cursor = ctx.vsc_db.ledger_actions
+    .aggregate(unstaking_pipeline).await
+    .map_err(|e| RespErr::DbErr { msg: e.to_string() })?;
+  bal.hive_unstaking = Some(
+    unstaking_cursor
+      .next().await
+      .transpose()
+      .map_err(|e| RespErr::DbErr { msg: e.to_string() })?
+      .map(|d| d.get_i64("totalAmount").unwrap_or(0))
+      .unwrap_or(0)
   );
   Ok(HttpResponse::Ok().json(bal))
 }
