@@ -127,6 +127,7 @@ impl BlockIndexer {
                 doc!{
                   "be_info": doc! {
                     "block_id": next_nums.1,
+                    "epoch": epoch.epoch as i32,
                     "signature": json_to_bson(signature),
                     "voted_weight": Bson::from(bv.voted_weight() as i64),
                     "eligible_weight": Bson::from(bv.eligible_weight() as i64)

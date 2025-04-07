@@ -144,6 +144,7 @@ pub struct BlockHeaderRecord {
 #[derive(Clone, Serialize, Deserialize)]
 pub struct BlockIndexed {
   pub block_id: u32,
+  pub epoch: u32,
   pub signature: Signature,
   pub voted_weight: u64,
   pub eligible_weight: u64,
