@@ -11,6 +11,7 @@ mod db;
 mod mongo;
 mod server_types;
 mod endpoints;
+mod indexer;
 mod vsc_types;
 mod hive_types;
 mod compiler;
@@ -58,7 +59,17 @@ async fn main() -> std::io::Result<()> {
   };
   let compiler = compiler::Compiler::init(&db_pool);
   compiler.notify();
-  let server_ctx = server_types::Context { db: db_pool, vsc_db, compiler, http_client: reqwest::Client::new() };
+  let http_client = reqwest::Client::new();
+  if config.be_indexer.unwrap_or(false) {
+    let l2_block_indexer = indexer::blocks::BlockIndexer::init(
+      http_client.clone(),
+      vsc_db.blocks.clone(),
+      vsc_db.elections.clone(),
+      vsc_db.indexer2.clone()
+    );
+    l2_block_indexer.start();
+  }
+  let server_ctx = server_types::Context { db: db_pool, vsc_db, compiler, http_client: http_client.clone() };
   HttpServer::new(move || {
     let cors = Cors::default().allow_any_origin().allow_any_method().allow_any_header().max_age(3600);
     App::new()
@@ -91,6 +102,9 @@ async fn main() -> std::io::Result<()> {
           .service(be_api::get_balance)
           .service(be_api::list_epochs)
           .service(be_api::get_epoch)
+          .service(be_api::list_blocks)
+          .service(be_api::get_block)
+          .service(be_api::get_block_by_cid)
       )
   })
     .bind((config.server.address.as_str(), config.server.port))?

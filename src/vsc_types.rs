@@ -1,8 +1,16 @@
 use serde::{ Serialize, Deserialize };
+use serde_json::Value;
+use mongodb::bson;
 
 #[derive(Clone, Debug, Deserialize)]
 pub struct HiveBlocksSyncState {
   pub head_height: u64,
+}
+
+#[derive(Clone, Debug, Deserialize)]
+pub struct BlockIndexerState {
+  pub l1_height: u32,
+  pub l2_height: u32,
 }
 
 #[derive(Clone, Serialize, Deserialize)]
@@ -112,24 +120,33 @@ pub struct ElectionExt {
   pub eligible_weight: u64,
 }
 
-#[derive(Serialize, Deserialize, Debug, Clone)]
+#[derive(Serialize, Deserialize, Clone)]
 pub struct BlockStat {
   pub size: u64,
 }
 
-#[derive(Serialize, Deserialize, Debug, Clone)]
+#[derive(Serialize, Deserialize, Clone)]
 pub struct BlockHeaderRecord {
   pub id: String,
   pub block: String,
   pub end_block: u32,
   pub merkle_root: String,
   pub proposer: String,
-  pub sig_root: String,
-  pub signers: String,
+  pub sig_root: Option<String>,
+  pub signers: Option<String>,
   pub slot_height: u32,
   pub start_block: u32,
   pub stats: BlockStat,
   pub ts: String,
+  pub be_info: Option<BlockIndexed>,
+}
+
+#[derive(Clone, Serialize, Deserialize)]
+pub struct BlockIndexed {
+  pub block_id: u32,
+  pub signature: Signature,
+  pub voted_weight: u64,
+  pub eligible_weight: u64,
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
@@ -167,4 +184,11 @@ pub struct Output {
   #[serde(rename = "id")]
   pub id: String,
   pub index: i64,
+}
+
+pub fn json_to_bson(option_json: Option<&Value>) -> bson::Bson {
+  match option_json {
+    Some(json_val) => bson::to_bson(json_val).expect("Failed to convert JSON to BSON"),
+    None => bson::Bson::Null,
+  }
 }

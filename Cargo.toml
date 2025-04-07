@@ -7,6 +7,7 @@ edition = "2021"
 actix-cors = "0.7.1"
 actix-multipart = "0.7.2"
 actix-web = "4.9.0"
+bv_decoder = { path = "lib/bv_decoder" }
 bollard = "0.18.1"
 chrono = "0.4.39"
 clap = { version = "4.5.30", features = ["derive"] }

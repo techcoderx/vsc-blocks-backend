@@ -5,7 +5,7 @@ use serde::Deserialize;
 use serde_json::json;
 use std::cmp::{ min, max };
 use crate::{
-  endpoints::inference::{ combine_inferred_epoch, infer_epoch },
+  indexer::epoch::{ combine_inferred_epoch, infer_epoch },
   server_types::{ Context, RespErr },
   vsc_types::{ LedgerBalance, RcUsedAtHeight },
 };
@@ -138,7 +138,8 @@ async fn get_balance(path: web::Path<String>, ctx: web::Data<Context>) -> Result
     doc! {
       "$match": doc! {
         "to": user.clone(),
-        "status": "pending"
+        "status": "pending",
+        "type": "consensus_unstake"
       }
     },
     doc! {
@@ -171,7 +172,7 @@ struct ListEpochOpts {
 #[get("/epochs")]
 async fn list_epochs(params: web::Query<ListEpochOpts>, ctx: web::Data<Context>) -> Result<HttpResponse, RespErr> {
   let last_epoch = params.last_epoch;
-  let count = min(1, max(params.count.unwrap_or(100), 100));
+  let count = max(min(1, params.count.unwrap_or(100)), 100);
   let opt = FindOptions::builder()
     .sort(doc! { "epoch": -1 })
     .build();
@@ -211,6 +212,64 @@ async fn get_epoch(path: web::Path<String>, ctx: web::Data<Context>) -> Result<H
       })?;
       Ok(HttpResponse::Ok().json(combine_inferred_epoch(&ep, &inferred)))
     }
+    None => Ok(HttpResponse::NotFound().json(json!({"error": "epoch does not exist"}))),
+  }
+}
+
+#[derive(Debug, Deserialize)]
+struct ListBlockOpts {
+  last_block_id: Option<i64>,
+  count: Option<i64>,
+}
+
+#[get("/blocks")]
+async fn list_blocks(params: web::Query<ListBlockOpts>, ctx: web::Data<Context>) -> Result<HttpResponse, RespErr> {
+  let last_block_id = params.last_block_id;
+  let count = max(min(1, params.count.unwrap_or(100)), 100);
+  let opt = FindOptions::builder()
+    .sort(doc! { "be_info.block_id": -1 })
+    .build();
+  let filter = match last_block_id {
+    Some(lb) => doc! { "be_info": doc! {"$exists": true}, "be_info.block_id": doc! {"$lte": lb} },
+    None => doc! { "be_info": doc! {"$exists": true} },
+  };
+  let mut blocks_cursor = ctx.vsc_db.blocks
+    .find(filter)
+    .with_options(opt)
+    .limit(count).await
+    .map_err(|e| RespErr::DbErr { msg: e.to_string() })?;
+  let mut results = Vec::new();
+  while let Some(doc) = blocks_cursor.next().await {
+    results.push(
+      serde_json
+        ::to_value(doc.map_err(|e| RespErr::DbErr { msg: e.to_string() })?)
+        .map_err(|e| RespErr::DbErr { msg: e.to_string() })?
+    );
+  }
+  Ok(HttpResponse::Ok().json(results))
+}
+
+#[get("/block/by-id/{id}")]
+async fn get_block(path: web::Path<String>, ctx: web::Data<Context>) -> Result<HttpResponse, RespErr> {
+  let block_num = path
+    .into_inner()
+    .parse::<i32>()
+    .map_err(|_| RespErr::BadRequest { msg: String::from("Invalid block number") })?;
+  let epoch = ctx.vsc_db.blocks
+    .find_one(doc! { "be_info.block_id": block_num }).await
+    .map_err(|e| RespErr::DbErr { msg: e.to_string() })?;
+  match epoch {
+    Some(block) => { Ok(HttpResponse::Ok().json(block)) }
+    None => Ok(HttpResponse::NotFound().json(json!({"error": "epoch does not exist"}))),
+  }
+}
+
+#[get("/block/by-cid/{cid}")]
+async fn get_block_by_cid(path: web::Path<String>, ctx: web::Data<Context>) -> Result<HttpResponse, RespErr> {
+  let block_cid = path.into_inner();
+  let epoch = ctx.vsc_db.blocks.find_one(doc! { "block": block_cid }).await.map_err(|e| RespErr::DbErr { msg: e.to_string() })?;
+  match epoch {
+    Some(block) => { Ok(HttpResponse::Ok().json(block)) }
     None => Ok(HttpResponse::NotFound().json(json!({"error": "epoch does not exist"}))),
   }
 }

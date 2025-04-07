@@ -54,3 +54,13 @@ pub struct OpsInBlock<T> {
   // pub total_pages: u32,
   pub operations_result: Vec<OpInBlock<T>>,
 }
+
+#[derive(Clone, Debug, Deserialize)]
+pub struct Transaction<T> {
+  pub operations: Vec<OpHeader<T>>,
+}
+
+#[derive(Clone, Debug, Deserialize)]
+pub struct TxByHash<T> {
+  pub transaction_json: Transaction<T>,
+}

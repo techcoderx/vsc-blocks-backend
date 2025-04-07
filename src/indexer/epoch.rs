@@ -1,9 +1,8 @@
-use mongodb::bson;
 use reqwest;
 use mongodb::{ bson::doc, Collection };
 use serde_json::{ Number, Value, from_value, json };
 use std::{ error, fmt };
-use crate::vsc_types::{ ElectionExt, ElectionResultRecord, Signature };
+use crate::vsc_types::{ ElectionExt, ElectionResultRecord, Signature, json_to_bson };
 use crate::hive_types::{ OpsInBlock, CustomJson };
 use crate::config::config;
 
@@ -21,13 +20,6 @@ impl error::Error for InferError {}
 impl fmt::Display for InferError {
   fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
     write!(f, "{}", self.message)
-  }
-}
-
-fn json_to_bson(option_json: Option<&Value>) -> bson::Bson {
-  match option_json {
-    Some(json_val) => bson::to_bson(json_val).expect("Failed to convert JSON to BSON"),
-    None => bson::Bson::Null,
   }
 }
 

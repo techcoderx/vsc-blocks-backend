@@ -1,0 +1,9 @@
+[package]
+name = "bv_decoder"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+base64 = "0.22.1"
+bit-set = "0.8.0"
+bit-vec = "0.8.0"

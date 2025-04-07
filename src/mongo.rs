@@ -3,6 +3,7 @@ use std::error::Error;
 use log::info;
 use crate::vsc_types::{
   BlockHeaderRecord,
+  BlockIndexerState,
   Contract,
   ElectionExt,
   ElectionResultRecord,
@@ -26,6 +27,7 @@ pub struct MongoDB {
   pub ledger_actions: Collection<LedgerActions>,
   pub rc: Collection<RcUsedAtHeight>,
   pub elections2: Collection<ElectionExt>,
+  pub indexer2: Collection<BlockIndexerState>,
 }
 
 impl MongoDB {
@@ -46,6 +48,7 @@ impl MongoDB {
       ledger_actions: db.collection("ledger_actions"),
       rc: db.collection("rcs"),
       elections2: db2.collection("elections2"),
+      indexer2: db2.collection("indexer_state"),
     })
   }
 }
