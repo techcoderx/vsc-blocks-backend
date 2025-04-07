@@ -260,7 +260,7 @@ async fn get_block(path: web::Path<String>, ctx: web::Data<Context>) -> Result<H
     .map_err(|e| RespErr::DbErr { msg: e.to_string() })?;
   match epoch {
     Some(block) => { Ok(HttpResponse::Ok().json(block)) }
-    None => Ok(HttpResponse::NotFound().json(json!({"error": "epoch does not exist"}))),
+    None => Ok(HttpResponse::NotFound().json(json!({"error": "Block does not exist"}))),
   }
 }
 
@@ -270,6 +270,41 @@ async fn get_block_by_cid(path: web::Path<String>, ctx: web::Data<Context>) -> R
   let epoch = ctx.vsc_db.blocks.find_one(doc! { "block": block_cid }).await.map_err(|e| RespErr::DbErr { msg: e.to_string() })?;
   match epoch {
     Some(block) => { Ok(HttpResponse::Ok().json(block)) }
-    None => Ok(HttpResponse::NotFound().json(json!({"error": "epoch does not exist"}))),
+    None => Ok(HttpResponse::NotFound().json(json!({"error": "Block does not exist"}))),
   }
+}
+
+#[get("/block/in-epoch/{epoch}")]
+async fn get_blocks_in_epoch(
+  path: web::Path<String>,
+  params: web::Query<ListBlockOpts>,
+  ctx: web::Data<Context>
+) -> Result<HttpResponse, RespErr> {
+  let last_block_id = params.last_block_id;
+  let count = max(min(1, params.count.unwrap_or(100)), 100);
+  let epoch = path
+    .into_inner()
+    .parse::<i32>()
+    .map_err(|_| RespErr::BadRequest { msg: String::from("Invalid epoch number") })?;
+  let opt = FindOptions::builder()
+    .sort(doc! { "be_info.block_id": -1 })
+    .build();
+  let filter = match last_block_id {
+    Some(lb) => doc! { "be_info.epoch": epoch, "be_info.block_id": doc! {"$lte": lb} },
+    None => doc! { "be_info.epoch": epoch },
+  };
+  let mut blocks_cursor = ctx.vsc_db.blocks
+    .find(filter)
+    .with_options(opt)
+    .limit(count).await
+    .map_err(|e| RespErr::DbErr { msg: e.to_string() })?;
+  let mut results = Vec::new();
+  while let Some(doc) = blocks_cursor.next().await {
+    results.push(
+      serde_json
+        ::to_value(doc.map_err(|e| RespErr::DbErr { msg: e.to_string() })?)
+        .map_err(|e| RespErr::DbErr { msg: e.to_string() })?
+    );
+  }
+  Ok(HttpResponse::Ok().json(results))
 }
