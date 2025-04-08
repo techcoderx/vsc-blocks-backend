@@ -63,14 +63,14 @@ pub struct RcUsedAtHeight {
   pub amount: u64,
 }
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Clone, Serialize, Deserialize)]
 pub struct DIDKey {
   ct: String,
   t: String,
   key: String,
 }
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Clone, Serialize, Deserialize)]
 pub struct Witnesses {
   account: String,
   height: i64,
@@ -86,7 +86,7 @@ pub struct Witnesses {
   version_id: String,
 }
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Clone, Serialize, Deserialize)]
 pub struct Contract {
   pub id: String,
   pub code: String,

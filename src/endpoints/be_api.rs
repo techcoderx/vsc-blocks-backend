@@ -76,11 +76,7 @@ async fn list_witnesses(ctx: web::Data<Context>) -> Result<HttpResponse, RespErr
   let mut cursor = ctx.vsc_db.witnesses.aggregate(pipeline).await.map_err(|e| RespErr::DbErr { msg: e.to_string() })?;
   let mut results = Vec::new();
   while let Some(doc) = cursor.next().await {
-    results.push(
-      serde_json
-        ::to_value(doc.map_err(|e| RespErr::DbErr { msg: e.to_string() })?)
-        .map_err(|e| RespErr::DbErr { msg: e.to_string() })?
-    );
+    results.push(doc.map_err(|e| RespErr::DbErr { msg: e.to_string() })?);
   }
   Ok(HttpResponse::Ok().json(results))
 }
@@ -240,11 +236,7 @@ async fn list_blocks(params: web::Query<ListBlockOpts>, ctx: web::Data<Context>)
     .map_err(|e| RespErr::DbErr { msg: e.to_string() })?;
   let mut results = Vec::new();
   while let Some(doc) = blocks_cursor.next().await {
-    results.push(
-      serde_json
-        ::to_value(doc.map_err(|e| RespErr::DbErr { msg: e.to_string() })?)
-        .map_err(|e| RespErr::DbErr { msg: e.to_string() })?
-    );
+    results.push(doc.map_err(|e| RespErr::DbErr { msg: e.to_string() })?);
   }
   Ok(HttpResponse::Ok().json(results))
 }
@@ -300,11 +292,7 @@ async fn get_blocks_in_epoch(
     .map_err(|e| RespErr::DbErr { msg: e.to_string() })?;
   let mut results = Vec::new();
   while let Some(doc) = blocks_cursor.next().await {
-    results.push(
-      serde_json
-        ::to_value(doc.map_err(|e| RespErr::DbErr { msg: e.to_string() })?)
-        .map_err(|e| RespErr::DbErr { msg: e.to_string() })?
-    );
+    results.push(doc.map_err(|e| RespErr::DbErr { msg: e.to_string() })?);
   }
   Ok(HttpResponse::Ok().json(results))
 }
@@ -353,6 +341,39 @@ async fn get_tx_output(path: web::Path<String>, ctx: web::Data<Context>) -> Resu
     Ok(HttpResponse::Ok().json(result))
   } else {
     Err(RespErr::InternalErr { msg: String::from("L2 transaction outputs are currently WIP") })
+  }
+}
+
+#[derive(Deserialize)]
+struct ListContractsOpts {
+  count: Option<i64>,
+}
+
+#[get("/contracts")]
+async fn list_contracts(params: web::Query<ListContractsOpts>, ctx: web::Data<Context>) -> Result<HttpResponse, RespErr> {
+  let count = max(min(1, params.count.unwrap_or(100)), 200);
+  let opt = FindOptions::builder()
+    .sort(doc! { "creation_height": -1 })
+    .build();
+  let mut contracts_cursor = ctx.vsc_db.contracts
+    .find(doc! {})
+    .with_options(opt)
+    .limit(count).await
+    .map_err(|e| RespErr::DbErr { msg: e.to_string() })?;
+  let mut results = Vec::new();
+  while let Some(doc) = contracts_cursor.next().await {
+    results.push(doc.map_err(|e| RespErr::DbErr { msg: e.to_string() })?);
+  }
+  Ok(HttpResponse::Ok().json(results))
+}
+
+#[get("/contract/{id}")]
+async fn get_contract(path: web::Path<String>, ctx: web::Data<Context>) -> Result<HttpResponse, RespErr> {
+  let id = path.into_inner();
+  let contract = ctx.vsc_db.contracts.find_one(doc! { "id": &id }).await.map_err(|e| RespErr::DbErr { msg: e.to_string() })?;
+  match contract {
+    Some(c) => { Ok(HttpResponse::Ok().json(c)) }
+    None => Ok(HttpResponse::NotFound().json(json!({"error": "Contract does not exist"}))),
   }
 }
 
