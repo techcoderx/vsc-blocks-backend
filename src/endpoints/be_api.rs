@@ -331,6 +331,11 @@ async fn get_tx_output(path: web::Path<String>, ctx: web::Data<Context>) -> Resu
             .find_one(doc! { "id": &trx_id }).await
             .map_err(|e| RespErr::DbErr { msg: e.to_string() })?;
           result.push(Some(serde_json::to_value(tx_out).unwrap()));
+        } else if &op.id == "vsc.create_contract" {
+          let contract = ctx.vsc_db.contracts
+            .find_one(doc! { "tx_id": &trx_id }).await
+            .map_err(|e| RespErr::DbErr { msg: e.to_string() })?;
+          result.push(Some(serde_json::to_value(contract).unwrap()));
         } else {
           result.push(None);
         }
