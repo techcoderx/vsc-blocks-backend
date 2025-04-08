@@ -9,12 +9,11 @@ mod config;
 mod constants;
 mod db;
 mod mongo;
-mod server_types;
+mod types;
 mod endpoints;
 mod indexer;
-mod vsc_types;
-mod hive_types;
 mod compiler;
+use types::server::Context;
 use endpoints::{ be_api, cv_api };
 
 #[actix_web::main]
@@ -61,7 +60,7 @@ async fn main() -> std::io::Result<()> {
     );
     l2_block_indexer.start();
   }
-  let server_ctx = server_types::Context { db: db_pool, vsc_db, compiler, http_client: http_client.clone() };
+  let server_ctx = Context { db: db_pool, vsc_db, compiler, http_client: http_client.clone() };
   HttpServer::new(move || {
     let cors = Cors::default().allow_any_origin().allow_any_method().allow_any_header().max_age(3600);
     App::new()

@@ -2,9 +2,10 @@ use reqwest;
 use mongodb::{ bson::doc, Collection };
 use serde_json::{ Number, Value, from_value, json };
 use std::{ error, fmt };
-use crate::vsc_types::{ ElectionExt, ElectionResultRecord, Signature, json_to_bson };
-use crate::hive_types::{ OpsInBlock, CustomJson };
-use crate::config::config;
+use crate::{
+  config::config,
+  types::{ hive::{ OpsInBlock, CustomJson }, vsc::{ ElectionExt, ElectionResultRecord, Signature, json_to_bson } },
+};
 
 const REQ_ERR: &str = "Failed to make request for inference";
 const PARSE_ERR: &str = "Failed to parse request response for inference";

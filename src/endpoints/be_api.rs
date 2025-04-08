@@ -6,8 +6,7 @@ use serde_json::json;
 use std::cmp::{ min, max };
 use crate::{
   indexer::epoch::{ combine_inferred_epoch, infer_epoch },
-  server_types::{ Context, RespErr },
-  vsc_types::{ LedgerBalance, RcUsedAtHeight },
+  types::{ server::{ Context, RespErr }, vsc::{ LedgerBalance, RcUsedAtHeight } },
 };
 
 #[get("")]

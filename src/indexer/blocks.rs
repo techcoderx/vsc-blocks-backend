@@ -8,8 +8,7 @@ use std::sync::Arc;
 use bv_decoder::BvWeights;
 use crate::{
   config::config,
-  hive_types::{ CustomJson, TxByHash },
-  vsc_types::{ json_to_bson, BlockHeaderRecord, BlockIndexerState, ElectionResultRecord },
+  types::{ hive::{ CustomJson, TxByHash }, vsc::{ json_to_bson, BlockHeaderRecord, BlockIndexerState, ElectionResultRecord } },
 };
 
 #[derive(Clone)]

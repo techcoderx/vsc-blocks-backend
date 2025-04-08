@@ -11,10 +11,7 @@ use sha2::{ Sha256, Digest };
 use jsonwebtoken::{ Header, EncodingKey, DecodingKey, Algorithm, Validation, errors::ErrorKind };
 use log::{ error, debug };
 use std::io::Read;
-use crate::constants::*;
-use crate::server_types::{ Context, RespErr };
-use crate::hive_types::{ JsonRpcResp, DgpAtBlock };
-use crate::config::config;
+use crate::{ config::config, constants::*, types::{ server::{ Context, RespErr }, hive::{ JsonRpcResp, DgpAtBlock } } };
 
 #[get("")]
 async fn hello() -> impl Responder {

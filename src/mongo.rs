@@ -1,7 +1,7 @@
 use mongodb::{ options::ClientOptions, Client, Collection };
 use std::error::Error;
 use log::info;
-use crate::vsc_types::{
+use crate::types::vsc::{
   BlockHeaderRecord,
   BlockIndexerState,
   Contract,
