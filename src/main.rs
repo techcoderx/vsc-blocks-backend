@@ -3,8 +3,8 @@ use actix_cors::Cors;
 use clap::Parser;
 use reqwest;
 use env_logger;
-use std::{ process, path::Path };
-use log::{ error, info, warn };
+use std::process;
+use log::{ error, info };
 mod config;
 mod constants;
 mod db;
@@ -20,15 +20,7 @@ use endpoints::{ be_api, cv_api };
 #[actix_web::main]
 async fn main() -> std::io::Result<()> {
   if config::Args::parse().dump_config {
-    std::env::set_var("RUST_LOG", String::from("info"));
-    env_logger::init();
-    if !Path::new(&config::Args::parse().config_file).exists() {
-      config::TomlConfig::dump_config_file();
-      info!("Dumped sample config file to config.toml");
-    } else {
-      warn!("Config file already exists, doing nothing.");
-    }
-    process::exit(0);
+    config::TomlConfig::dump_config_file();
   }
   let config = &config::config;
   if std::env::var("RUST_LOG").is_err() {

@@ -1,5 +1,7 @@
 use serde_derive::{ Serialize, Deserialize };
-use std::{ fs, error, env::current_dir };
+use std::{ fs, error, env::{ current_dir, set_var }, path::Path, process };
+use env_logger;
+use log::{ info, warn };
 use rand::Rng;
 use hex;
 use toml;
@@ -60,26 +62,35 @@ impl TomlConfig {
   }
 
   pub fn dump_config_file() {
-    let default_conf = TomlConfig {
-      log_level: Some(String::from("info")),
-      psql_url: String::from("postgres://postgres:mysecretpassword@127.0.0.1:5432/postgres"),
-      mongo_url: String::from("mongodb://localhost:27017"),
-      hive_rpc: String::from("https://techcoderx.com"),
-      be_indexer: None,
-      auth: AuthConf {
-        enabled: true,
-        id: Some(String::from("vsc_cv_login")),
-        timeout_blocks: Some(20),
-        key: Some(hex::encode(rand::rng().random::<[u8; 32]>())),
-      },
-      server: ServerConfig { address: String::from("127.0.0.1"), port: 8080 },
-      ascompiler: ASCompilerConf {
-        image: String::from("as-compiler"),
-        src_dir: format!("{}/as_compiler", current_dir().unwrap().to_str().unwrap()),
-      },
-    };
-    let serialized = toml::ser::to_string(&default_conf).unwrap();
-    let _ = fs::write(Args::parse().config_file, serialized);
+    set_var("RUST_LOG", String::from("info"));
+    env_logger::init();
+    let filepath = Args::parse().config_file;
+    if !Path::new(&filepath).exists() {
+      let default_conf = TomlConfig {
+        log_level: Some(String::from("info")),
+        psql_url: String::from("postgres://postgres:mysecretpassword@127.0.0.1:5432/postgres"),
+        mongo_url: String::from("mongodb://localhost:27017"),
+        hive_rpc: String::from("https://techcoderx.com"),
+        be_indexer: None,
+        auth: AuthConf {
+          enabled: true,
+          id: Some(String::from("vsc_cv_login")),
+          timeout_blocks: Some(20),
+          key: Some(hex::encode(rand::rng().random::<[u8; 32]>())),
+        },
+        server: ServerConfig { address: String::from("127.0.0.1"), port: 8080 },
+        ascompiler: ASCompilerConf {
+          image: String::from("as-compiler"),
+          src_dir: format!("{}/as_compiler", current_dir().unwrap().to_str().unwrap()),
+        },
+      };
+      let serialized = toml::ser::to_string(&default_conf).unwrap();
+      let _ = fs::write(&filepath, serialized);
+      info!("Dumped sample config file to {}", &filepath);
+    } else {
+      warn!("Config file already exists, doing nothing.");
+    }
+    process::exit(0);
   }
 }
 
