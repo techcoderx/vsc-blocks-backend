@@ -26,7 +26,7 @@ pub struct BvWeights {
 
 impl fmt::Display for BvWeights {
   fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-    write!(f, "Binary: {}", self.bv)
+    write!(f, "Binary: {} Voted: {} Eligible: {}", self.bv, self.voted_weight(), self.eligible_weight())
   }
 }
 
