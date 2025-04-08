@@ -267,8 +267,8 @@ async fn get_block(path: web::Path<String>, ctx: web::Data<Context>) -> Result<H
 #[get("/block/by-cid/{cid}")]
 async fn get_block_by_cid(path: web::Path<String>, ctx: web::Data<Context>) -> Result<HttpResponse, RespErr> {
   let block_cid = path.into_inner();
-  let epoch = ctx.vsc_db.blocks.find_one(doc! { "block": block_cid }).await.map_err(|e| RespErr::DbErr { msg: e.to_string() })?;
-  match epoch {
+  let block = ctx.vsc_db.blocks.find_one(doc! { "block": block_cid }).await.map_err(|e| RespErr::DbErr { msg: e.to_string() })?;
+  match block {
     Some(block) => { Ok(HttpResponse::Ok().json(block)) }
     None => Ok(HttpResponse::NotFound().json(json!({"error": "Block does not exist"}))),
   }
@@ -336,8 +336,8 @@ async fn get_tx_output(path: web::Path<String>, ctx: web::Data<Context>) -> Resu
           &op.id == "vsc.withdraw" ||
           &op.id == "vsc.consensus_stake" ||
           &op.id == "vsc.consensus_unstake" ||
-          &op.id == "vsc.stake" ||
-          &op.id == "vsc.unstake"
+          &op.id == "vsc.stake_hbd" ||
+          &op.id == "vsc.unstake_hbd"
         {
           let tx_out = ctx.vsc_db.tx_pool
             .find_one(doc! { "id": &trx_id }).await
@@ -354,4 +354,26 @@ async fn get_tx_output(path: web::Path<String>, ctx: web::Data<Context>) -> Resu
   } else {
     Err(RespErr::InternalErr { msg: String::from("L2 transaction outputs are currently WIP") })
   }
+}
+
+#[get("/search/{query}")]
+async fn search(path: web::Path<String>, ctx: web::Data<Context>) -> Result<HttpResponse, RespErr> {
+  let query = path.into_inner();
+  let block = ctx.vsc_db.blocks.find_one(doc! { "block": &query }).await.map_err(|e| RespErr::DbErr { msg: e.to_string() })?;
+  if block.is_some() {
+    return Ok(HttpResponse::Ok().json(json!({"type": "block", "result": &query})));
+  }
+  let election = ctx.vsc_db.elections.find_one(doc! { "data": &query }).await.map_err(|e| RespErr::DbErr { msg: e.to_string() })?;
+  if election.is_some() {
+    return Ok(HttpResponse::Ok().json(json!({"type": "election", "result": election.unwrap().epoch})));
+  }
+  let contract = ctx.vsc_db.contracts.find_one(doc! { "id": &query }).await.map_err(|e| RespErr::DbErr { msg: e.to_string() })?;
+  if contract.is_some() {
+    return Ok(HttpResponse::Ok().json(json!({"type": "contract", "result": &query})));
+  }
+  let tx = ctx.vsc_db.tx_pool.find_one(doc! { "id": &query }).await.map_err(|e| RespErr::DbErr { msg: e.to_string() })?;
+  if tx.is_some() {
+    return Ok(HttpResponse::Ok().json(json!({"type": "tx", "result": &query})));
+  }
+  Ok(HttpResponse::Ok().json(json!({"type": "", "result": ""})))
 }
