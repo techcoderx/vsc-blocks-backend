@@ -97,6 +97,7 @@ async fn main() -> std::io::Result<()> {
           .service(be_api::get_block)
           .service(be_api::get_block_by_cid)
           .service(be_api::get_blocks_in_epoch)
+          .service(be_api::get_tx_output)
       )
   })
     .bind((config.server.address.as_str(), config.server.port))?

@@ -17,7 +17,7 @@ pub struct DgpAtBlock {
 
 #[derive(Clone, Debug, Deserialize)]
 pub struct CustomJson {
-  // pub id: String,
+  pub id: String,
   pub json: String,
   pub required_auths: Vec<String>,
   // pub required_posting_auths: Vec<String>,
@@ -25,8 +25,8 @@ pub struct CustomJson {
 
 #[derive(Clone, Debug, Deserialize)]
 pub struct OpHeader<T> {
-  // #[serde(rename = "type")]
-  // pub r#type: String,
+  #[serde(rename = "type")]
+  pub r#type: String,
   pub value: T,
 }
 

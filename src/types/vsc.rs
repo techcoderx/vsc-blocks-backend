@@ -42,6 +42,22 @@ pub struct LedgerActions {
 }
 
 #[derive(Clone, Serialize, Deserialize)]
+pub struct LedgerOpLog {
+  pub to: String,
+  pub from: String,
+  pub amount: u64,
+  pub asset: String,
+  pub memo: String,
+  #[serde(rename = "type")]
+  pub r#type: String,
+  pub id: String,
+  pub bidx: u64,
+  pub opidx: u64,
+  pub blockheight: u64,
+  pub params: Option<Value>,
+}
+
+#[derive(Clone, Serialize, Deserialize)]
 pub struct RcUsedAtHeight {
   pub block_height: u64,
   pub amount: u64,
@@ -150,37 +166,34 @@ pub struct BlockIndexed {
   pub eligible_weight: u64,
 }
 
-#[derive(Clone, Debug, Serialize, Deserialize)]
+#[derive(Clone, Serialize, Deserialize)]
 pub struct TransactionRecord {
   #[serde(rename = "id")]
   pub id: String,
   pub status: String,
   #[serde(rename = "required_auths")]
-  pub required_auths: Vec<String>,
-  pub nonce: i64,
+  pub required_auths: Option<Vec<String>>,
+  pub nonce: Option<i64>,
   #[serde(rename = "rc_limit")]
-  pub rc_limit: u64,
-  #[serde(rename = "type")]
-  pub type_: String,
-  #[serde(rename = "__v")]
-  pub version: String,
+  pub rc_limit: Option<u64>,
   // pub data: Document,
-  #[serde(rename = "anchr_block")]
-  pub anchored_block: String,
-  #[serde(rename = "anchr_id")]
-  pub anchored_id: String,
-  #[serde(rename = "anchr_index")]
-  pub anchored_index: i64,
-  #[serde(rename = "anchr_opidx")]
-  pub anchored_opidx: i64,
-  #[serde(rename = "anchr_height")]
-  pub anchored_height: u64,
+  // #[serde(rename = "anchr_block")]
+  // pub anchored_block: String,
+  // #[serde(rename = "anchr_id")]
+  // pub anchored_id: String,
+  // #[serde(rename = "anchr_index")]
+  // pub anchored_index: i64,
+  // #[serde(rename = "anchr_opidx")]
+  // pub anchored_opidx: i64,
+  // #[serde(rename = "anchr_height")]
+  // pub anchored_height: u64,
   // #[serde(rename = "first_seen")]
   // pub first_seen: DateTime<Utc>,
   pub output: Option<Output>,
+  pub ledger: Option<Vec<LedgerOpLog>>,
 }
 
-#[derive(Clone, Debug, Serialize, Deserialize)]
+#[derive(Clone, Serialize, Deserialize)]
 pub struct Output {
   #[serde(rename = "id")]
   pub id: String,

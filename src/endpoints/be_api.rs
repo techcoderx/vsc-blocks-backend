@@ -2,11 +2,12 @@ use actix_web::{ get, web, HttpResponse, Responder };
 use futures_util::StreamExt;
 use mongodb::{ bson::{ doc, Bson }, options::{ FindOneOptions, FindOptions } };
 use serde::Deserialize;
-use serde_json::json;
+use serde_json::{ json, Value };
 use std::cmp::{ min, max };
 use crate::{
+  config::config,
   indexer::epoch::{ combine_inferred_epoch, infer_epoch },
-  types::{ server::{ Context, RespErr }, vsc::{ LedgerBalance, RcUsedAtHeight } },
+  types::{ hive::{ CustomJson, TxByHash }, server::{ Context, RespErr }, vsc::{ LedgerBalance, RcUsedAtHeight } },
 };
 
 #[get("")]
@@ -306,4 +307,51 @@ async fn get_blocks_in_epoch(
     );
   }
   Ok(HttpResponse::Ok().json(results))
+}
+
+#[get("/tx/{trx_id}/output")]
+async fn get_tx_output(path: web::Path<String>, ctx: web::Data<Context>) -> Result<HttpResponse, RespErr> {
+  let trx_id = path.into_inner();
+  if trx_id.len() == 40 {
+    let tx = ctx.http_client
+      .get(format!("{}/hafah-api/transactions/{}", config.hive_rpc.clone(), &trx_id))
+      .send().await
+      .map_err(|e| RespErr::InternalErr { msg: e.to_string() })?;
+    if tx.status() == reqwest::StatusCode::BAD_REQUEST {
+      return Err(RespErr::BadRequest { msg: String::from("transaction does not exist") });
+    }
+    let tx = tx.json::<TxByHash<Value>>().await.unwrap();
+    let mut result: Vec<Option<Value>> = Vec::new();
+    for o in tx.transaction_json.operations {
+      if o.r#type == "custom_json_operation" {
+        let op = serde_json::from_value::<CustomJson>(o.value).unwrap();
+        if &op.id == "vsc.produce_block" {
+          let block = ctx.vsc_db.blocks
+            .find_one(doc! { "id": &trx_id }).await
+            .map_err(|e| RespErr::DbErr { msg: e.to_string() })?;
+          result.push(Some(serde_json::to_value(block).unwrap()));
+        } else if
+          &op.id == "vsc.call" ||
+          &op.id == "vsc.transfer" ||
+          &op.id == "vsc.withdraw" ||
+          &op.id == "vsc.consensus_stake" ||
+          &op.id == "vsc.consensus_unstake" ||
+          &op.id == "vsc.stake" ||
+          &op.id == "vsc.unstake"
+        {
+          let tx_out = ctx.vsc_db.tx_pool
+            .find_one(doc! { "id": &trx_id }).await
+            .map_err(|e| RespErr::DbErr { msg: e.to_string() })?;
+          result.push(Some(serde_json::to_value(tx_out).unwrap()));
+        } else {
+          result.push(None);
+        }
+      } else {
+        result.push(None);
+      }
+    }
+    Ok(HttpResponse::Ok().json(result))
+  } else {
+    Err(RespErr::InternalErr { msg: String::from("L2 transaction outputs are currently WIP") })
+  }
 }
