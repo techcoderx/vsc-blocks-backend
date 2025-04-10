@@ -114,13 +114,21 @@ impl ElectionIndexer {
                   };
                   let weights = match sig_obj {
                     Some(sign) => {
-                      let bv = BvWeights::from_b64url(&sign.bv, &epoch.weights);
-                      if bv.is_err() {
-                        error!("Failed to decode bv: {}, setting weights to 0", bv.unwrap_err());
-                        (0, 0)
-                      } else {
-                        let bv = bv.unwrap();
-                        (bv.voted_weight(), bv.eligible_weight())
+                      let weights = match election_db.find_one(doc! { "epoch": (next_num as i64)-1 }).await {
+                        Ok(pe) =>
+                          match pe {
+                            Some(pe) => pe.weights,
+                            None => vec![],
+                          }
+                        Err(e) => {
+                          error!("Failed to query previous epoch {}", e);
+                          sleep(Duration::from_secs(60)).await;
+                          continue 'mainloop;
+                        }
+                      };
+                      match BvWeights::from_b64url(&sign.bv, &weights) {
+                        Ok(bv) => (bv.voted_weight(), bv.eligible_weight()),
+                        Err(_) => (0, 0),
                       }
                     }
                     None => (0, 0),
