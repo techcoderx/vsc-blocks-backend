@@ -6,7 +6,6 @@ use serde_json::{ json, Value };
 use std::cmp::{ min, max };
 use crate::{
   config::config,
-  indexer::epoch::{ combine_inferred_epoch, infer_epoch },
   types::{ hive::{ CustomJson, TxByHash }, server::{ Context, RespErr }, vsc::{ LedgerBalance, RcUsedAtHeight } },
 };
 
@@ -183,11 +182,7 @@ async fn list_epochs(params: web::Query<ListEpochOpts>, ctx: web::Data<Context>)
     .map_err(|e| RespErr::DbErr { msg: e.to_string() })?;
   let mut results = Vec::new();
   while let Some(doc) = epochs_cursor.next().await {
-    let doc = doc.unwrap();
-    let inferred = infer_epoch(&ctx.http_client, &ctx.vsc_db.elections2, &doc).await.map_err(|e| RespErr::InternalErr {
-      msg: e.to_string(),
-    })?;
-    results.push(combine_inferred_epoch(&doc, &inferred));
+    results.push(doc.map_err(|e| RespErr::DbErr { msg: e.to_string() })?);
   }
   Ok(HttpResponse::Ok().json(results))
 }
@@ -202,13 +197,8 @@ async fn get_epoch(path: web::Path<String>, ctx: web::Data<Context>) -> Result<H
     .find_one(doc! { "epoch": epoch_num }).await
     .map_err(|e| RespErr::DbErr { msg: e.to_string() })?;
   match epoch {
-    Some(ep) => {
-      let inferred = infer_epoch(&ctx.http_client, &ctx.vsc_db.elections2, &ep).await.map_err(|e| RespErr::InternalErr {
-        msg: e.to_string(),
-      })?;
-      Ok(HttpResponse::Ok().json(combine_inferred_epoch(&ep, &inferred)))
-    }
-    None => Ok(HttpResponse::NotFound().json(json!({"error": "epoch does not exist"}))),
+    Some(ep) => Ok(HttpResponse::Ok().json(ep)),
+    None => Ok(HttpResponse::NotFound().json(json!({"error": "Epoch does not exist"}))),
   }
 }
 

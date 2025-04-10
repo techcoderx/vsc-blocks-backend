@@ -115,4 +115,11 @@ mod tests {
     expected.extend(bits.iter().copied());
     assert_eq!(bv_weights.bv, expected);
   }
+
+  #[test]
+  fn test_empty() {
+    let bv_weights = BvWeights::from_b64url("", &vec![]).unwrap();
+    assert_eq!(bv_weights.eligible_weight(), 0);
+    assert_eq!(bv_weights.voted_weight(), 0);
+  }
 }

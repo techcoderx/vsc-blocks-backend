@@ -11,6 +11,7 @@ pub struct HiveBlocksSyncState {
 pub struct IndexerState {
   pub l1_height: u32,
   pub l2_height: u32,
+  pub epoch: i32,
 }
 
 #[derive(Clone, Serialize, Deserialize)]
@@ -123,12 +124,11 @@ pub struct ElectionResultRecord {
   pub proposer: String,
   #[serde(rename = "type")]
   pub r#type: String,
+  pub be_info: Option<ElectionExt>,
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct ElectionExt {
-  #[serde(rename = "_id")]
-  pub epoch: u64,
   pub ts: String,
   pub trx_id: String,
   pub signature: Option<Signature>,

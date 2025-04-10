@@ -52,13 +52,13 @@ async fn main() -> std::io::Result<()> {
   compiler.notify();
   let http_client = reqwest::Client::new();
   if config.be_indexer.unwrap_or(false) {
-    let l2_block_indexer = indexer::blocks::BlockIndexer::init(
+    let idxer = indexer::indexer::Indexer::init(
       http_client.clone(),
       vsc_db.blocks.clone(),
       vsc_db.elections.clone(),
       vsc_db.indexer2.clone()
     );
-    l2_block_indexer.start();
+    idxer.start();
   }
   let server_ctx = Context { db: db_pool, vsc_db, compiler, http_client: http_client.clone() };
   HttpServer::new(move || {
