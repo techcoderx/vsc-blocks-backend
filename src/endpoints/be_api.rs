@@ -266,6 +266,21 @@ async fn get_block_by_cid(path: web::Path<String>, ctx: web::Data<Context>) -> R
   }
 }
 
+#[get("/block/by-slot/{height}")]
+async fn get_block_by_slot(path: web::Path<String>, ctx: web::Data<Context>) -> Result<HttpResponse, RespErr> {
+  let height = path
+    .into_inner()
+    .parse::<i32>()
+    .map_err(|_| RespErr::BadRequest { msg: String::from("Invalid slot height") })?;
+  let block = ctx.vsc_db.blocks
+    .find_one(doc! { "slot_height": height }).await
+    .map_err(|e| RespErr::DbErr { msg: e.to_string() })?;
+  match block {
+    Some(block) => { Ok(HttpResponse::Ok().json(block)) }
+    None => Ok(HttpResponse::NotFound().json(json!({"error": "No block found in slot"}))),
+  }
+}
+
 #[get("/block/in-epoch/{epoch}")]
 async fn get_blocks_in_epoch(
   path: web::Path<String>,
