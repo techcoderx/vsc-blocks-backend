@@ -8,7 +8,7 @@ pub struct HiveBlocksSyncState {
 }
 
 #[derive(Clone, Debug, Deserialize)]
-pub struct BlockIndexerState {
+pub struct IndexerState {
   pub l1_height: u32,
   pub l2_height: u32,
 }

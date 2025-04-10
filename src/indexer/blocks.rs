@@ -8,7 +8,7 @@ use std::sync::Arc;
 use bv_decoder::BvWeights;
 use crate::{
   config::config,
-  types::{ hive::{ CustomJson, TxByHash }, vsc::{ json_to_bson, BlockHeaderRecord, BlockIndexerState, ElectionResultRecord } },
+  types::{ hive::{ CustomJson, TxByHash }, vsc::{ json_to_bson, BlockHeaderRecord, IndexerState, ElectionResultRecord } },
 };
 
 #[derive(Clone)]
@@ -16,7 +16,7 @@ pub struct BlockIndexer {
   http_client: reqwest::Client,
   blocks_db: Collection<BlockHeaderRecord>,
   elections_db: Collection<ElectionResultRecord>,
-  indexer2: Collection<BlockIndexerState>,
+  indexer2: Collection<IndexerState>,
   is_running: Arc<RwLock<bool>>,
 }
 
@@ -25,7 +25,7 @@ impl BlockIndexer {
     http_client: reqwest::Client,
     blocks_db: Collection<BlockHeaderRecord>,
     elections_db: Collection<ElectionResultRecord>,
-    indexer2: Collection<BlockIndexerState>
+    indexer2: Collection<IndexerState>
   ) -> BlockIndexer {
     return BlockIndexer { http_client, blocks_db, elections_db, indexer2, is_running: Arc::new(RwLock::new(false)) };
   }
