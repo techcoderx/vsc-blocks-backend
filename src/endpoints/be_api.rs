@@ -167,7 +167,7 @@ struct ListEpochOpts {
 #[get("/epochs")]
 async fn list_epochs(params: web::Query<ListEpochOpts>, ctx: web::Data<Context>) -> Result<HttpResponse, RespErr> {
   let last_epoch = params.last_epoch;
-  let count = max(min(1, params.count.unwrap_or(100)), 100);
+  let count = min(max(1, params.count.unwrap_or(100)), 100);
   let opt = FindOptions::builder()
     .sort(doc! { "epoch": -1 })
     .build();
@@ -211,7 +211,7 @@ struct ListBlockOpts {
 #[get("/blocks")]
 async fn list_blocks(params: web::Query<ListBlockOpts>, ctx: web::Data<Context>) -> Result<HttpResponse, RespErr> {
   let last_block_id = params.last_block_id;
-  let count = max(min(1, params.count.unwrap_or(100)), 100);
+  let count = min(max(1, params.count.unwrap_or(100)), 100);
   let opt = FindOptions::builder()
     .sort(doc! { "be_info.block_id": -1 })
     .build();
@@ -278,7 +278,7 @@ async fn get_blocks_in_epoch(
   ctx: web::Data<Context>
 ) -> Result<HttpResponse, RespErr> {
   let last_block_id = params.last_block_id;
-  let count = max(min(1, params.count.unwrap_or(100)), 100);
+  let count = min(max(1, params.count.unwrap_or(100)), 100);
   let epoch = path
     .into_inner()
     .parse::<i32>()
@@ -361,7 +361,7 @@ struct ListContractsOpts {
 
 #[get("/contracts")]
 async fn list_contracts(params: web::Query<ListContractsOpts>, ctx: web::Data<Context>) -> Result<HttpResponse, RespErr> {
-  let count = max(min(1, params.count.unwrap_or(100)), 200);
+  let count = min(max(1, params.count.unwrap_or(100)), 200);
   let opt = FindOptions::builder()
     .sort(doc! { "creation_height": -1 })
     .build();
