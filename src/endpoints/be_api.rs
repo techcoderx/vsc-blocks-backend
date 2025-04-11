@@ -241,43 +241,23 @@ async fn list_blocks(params: web::Query<ListBlockOpts>, ctx: web::Data<Context>)
   Ok(HttpResponse::Ok().json(results))
 }
 
-#[get("/block/by-id/{id}")]
-async fn get_block(path: web::Path<String>, ctx: web::Data<Context>) -> Result<HttpResponse, RespErr> {
-  let block_num = path
-    .into_inner()
-    .parse::<i32>()
-    .map_err(|_| RespErr::BadRequest { msg: String::from("Invalid block number") })?;
-  let epoch = ctx.vsc_db.blocks
-    .find_one(doc! { "be_info.block_id": block_num }).await
-    .map_err(|e| RespErr::DbErr { msg: e.to_string() })?;
+#[get("/block/by-{by}/{id}")]
+async fn get_block(path: web::Path<(String, String)>, ctx: web::Data<Context>) -> Result<HttpResponse, RespErr> {
+  let (by, id) = path.into_inner();
+  let filter = match by.as_str() {
+    "id" =>
+      doc! { "be_info.block_id": id.parse::<i32>().map_err(|_| RespErr::BadRequest { msg: String::from("Invalid block number") })? },
+    "cid" => doc! { "block": id },
+    "slot" =>
+      doc! { "slot_height": id.parse::<i32>().map_err(|_| RespErr::BadRequest { msg: String::from("Invalid slot height") })? },
+    _ => {
+      return Err(RespErr::BadRequest { msg: String::from("Invalid by clause") });
+    }
+  };
+  let epoch = ctx.vsc_db.blocks.find_one(filter).await.map_err(|e| RespErr::DbErr { msg: e.to_string() })?;
   match epoch {
     Some(block) => { Ok(HttpResponse::Ok().json(block)) }
-    None => Ok(HttpResponse::NotFound().json(json!({"error": "Block does not exist"}))),
-  }
-}
-
-#[get("/block/by-cid/{cid}")]
-async fn get_block_by_cid(path: web::Path<String>, ctx: web::Data<Context>) -> Result<HttpResponse, RespErr> {
-  let block_cid = path.into_inner();
-  let block = ctx.vsc_db.blocks.find_one(doc! { "block": block_cid }).await.map_err(|e| RespErr::DbErr { msg: e.to_string() })?;
-  match block {
-    Some(block) => { Ok(HttpResponse::Ok().json(block)) }
-    None => Ok(HttpResponse::NotFound().json(json!({"error": "Block does not exist"}))),
-  }
-}
-
-#[get("/block/by-slot/{height}")]
-async fn get_block_by_slot(path: web::Path<String>, ctx: web::Data<Context>) -> Result<HttpResponse, RespErr> {
-  let height = path
-    .into_inner()
-    .parse::<i32>()
-    .map_err(|_| RespErr::BadRequest { msg: String::from("Invalid slot height") })?;
-  let block = ctx.vsc_db.blocks
-    .find_one(doc! { "slot_height": height }).await
-    .map_err(|e| RespErr::DbErr { msg: e.to_string() })?;
-  match block {
-    Some(block) => { Ok(HttpResponse::Ok().json(block)) }
-    None => Ok(HttpResponse::NotFound().json(json!({"error": "No block found in slot"}))),
+    None => Ok(HttpResponse::NotFound().json(json!({"error": "Block not found"}))),
   }
 }
 
