@@ -206,19 +206,29 @@ async fn get_epoch(path: web::Path<String>, ctx: web::Data<Context>) -> Result<H
 struct ListBlockOpts {
   last_block_id: Option<i64>,
   count: Option<i64>,
+  proposer: Option<String>,
+  epoch: Option<i64>,
 }
 
 #[get("/blocks")]
 async fn list_blocks(params: web::Query<ListBlockOpts>, ctx: web::Data<Context>) -> Result<HttpResponse, RespErr> {
   let last_block_id = params.last_block_id;
+  let proposer = params.proposer.clone();
+  let epoch = params.epoch;
   let count = min(max(1, params.count.unwrap_or(100)), 100);
   let opt = FindOptions::builder()
     .sort(doc! { "be_info.block_id": -1 })
     .build();
-  let filter = match last_block_id {
-    Some(lb) => doc! { "be_info": doc! {"$exists": true}, "be_info.block_id": doc! {"$lte": lb} },
-    None => doc! { "be_info": doc! {"$exists": true} },
-  };
+  let mut filter = doc! { "be_info": doc! {"$exists": true} };
+  if last_block_id.is_some() {
+    filter.insert("be_info.block_id", doc! { "$lte": last_block_id.unwrap() });
+  }
+  if proposer.is_some() {
+    filter.insert("proposer", &proposer.unwrap());
+  }
+  if epoch.is_some() {
+    filter.insert("be_info.epoch", epoch.unwrap());
+  }
   let mut blocks_cursor = ctx.vsc_db.blocks
     .find(filter)
     .with_options(opt)
@@ -269,37 +279,6 @@ async fn get_block_by_slot(path: web::Path<String>, ctx: web::Data<Context>) -> 
     Some(block) => { Ok(HttpResponse::Ok().json(block)) }
     None => Ok(HttpResponse::NotFound().json(json!({"error": "No block found in slot"}))),
   }
-}
-
-#[get("/block/in-epoch/{epoch}")]
-async fn get_blocks_in_epoch(
-  path: web::Path<String>,
-  params: web::Query<ListBlockOpts>,
-  ctx: web::Data<Context>
-) -> Result<HttpResponse, RespErr> {
-  let last_block_id = params.last_block_id;
-  let count = min(max(1, params.count.unwrap_or(100)), 100);
-  let epoch = path
-    .into_inner()
-    .parse::<i32>()
-    .map_err(|_| RespErr::BadRequest { msg: String::from("Invalid epoch number") })?;
-  let opt = FindOptions::builder()
-    .sort(doc! { "be_info.block_id": -1 })
-    .build();
-  let filter = match last_block_id {
-    Some(lb) => doc! { "be_info.epoch": epoch, "be_info.block_id": doc! {"$lte": lb} },
-    None => doc! { "be_info.epoch": epoch },
-  };
-  let mut blocks_cursor = ctx.vsc_db.blocks
-    .find(filter)
-    .with_options(opt)
-    .limit(count).await
-    .map_err(|e| RespErr::DbErr { msg: e.to_string() })?;
-  let mut results = Vec::new();
-  while let Some(doc) = blocks_cursor.next().await {
-    results.push(doc.map_err(|e| RespErr::DbErr { msg: e.to_string() })?);
-  }
-  Ok(HttpResponse::Ok().json(results))
 }
 
 #[get("/tx/{trx_id}/output")]
