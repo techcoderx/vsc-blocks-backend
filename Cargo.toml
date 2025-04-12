@@ -1,5 +1,5 @@
 [package]
-name = "vsc-contract-verifier"
+name = "vsc-blocks-backend"
 version = "0.1.0"
 edition = "2021"
 

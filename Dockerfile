@@ -20,9 +20,9 @@ FROM debian:bookworm-slim
 RUN apt-get update && apt-get install -y openssl ca-certificates curl && rm -rf /var/lib/apt/lists/*
 
 # Copy built binary from builder
-COPY --from=builder /app/target/release/vsc-contract-verifier /app/vsc-contract-verifier
+COPY --from=builder /app/target/release/vsc-blocks-backend /app/vsc-blocks-backend
 
 # Set working directory and default command
 WORKDIR /app
 EXPOSE 8080
-CMD ["/app/vsc-contract-verifier", "-c", "/app/config/config.toml"]
+CMD ["/app/vsc-blocks-backend", "-c", "/app/config/config.toml"]

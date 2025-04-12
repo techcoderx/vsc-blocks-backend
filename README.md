@@ -1,8 +1,10 @@
-# VSC Contract Verifier
+# VSC Blocks Backend
 
-Verifies VSC contracts by compiling the contract source code and comparing the output bytecode CID against the deployed contract code CID.
+Backend server for [VSC Blocks](https://vsc.techcoderx.com). This is an extension of [go-vsc-node](https://github.com/vsc-eco/go-vsc-node) which provides the following services:
 
-Contract code compilation is done within Docker containers.
+- Contract verifier
+- REST API
+- _(future)_ Chatbots
 
 ## Compile
 
@@ -17,7 +19,7 @@ cargo b -r
 Dump a sample config file to `config.toml`:
 
 ```sh
-./vsc-contract-verifier --dump-config
+./vsc-blocks-backend --dump-config
 ```
 
 ## Building compiler docker image
@@ -31,4 +33,4 @@ docker build -t as-compiler .
 
 ## License
 
-This project is dual licensed under the [MIT License](https://github.com/techcoderx/vsc-contract-verifier/blob/main/LICENSE-MIT) or [Apache License 2.0](https://github.com/techcoderx/vsc-contract-verifier/blob/main/LICENSE-APACHE).
+This project is dual licensed under the [MIT License](https://github.com/techcoderx/vsc-blocks-backend/blob/main/LICENSE-MIT) or [Apache License 2.0](https://github.com/techcoderx/vsc-blocks-backend/blob/main/LICENSE-APACHE).
