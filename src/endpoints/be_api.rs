@@ -162,19 +162,24 @@ async fn get_balance(path: web::Path<String>, ctx: web::Data<Context>) -> Result
 struct ListEpochOpts {
   last_epoch: Option<i64>,
   count: Option<i64>,
+  proposer: Option<String>,
 }
 
 #[get("/epochs")]
 async fn list_epochs(params: web::Query<ListEpochOpts>, ctx: web::Data<Context>) -> Result<HttpResponse, RespErr> {
   let last_epoch = params.last_epoch;
+  let proposer = params.proposer.clone();
   let count = min(max(1, params.count.unwrap_or(100)), 100);
   let opt = FindOptions::builder()
     .sort(doc! { "epoch": -1 })
     .build();
-  let filter = match last_epoch {
+  let mut filter = match last_epoch {
     Some(le) => doc! { "epoch": doc! {"$lte": le} },
     None => doc! {},
   };
+  if proposer.is_some() {
+    filter.insert("proposer", &proposer.unwrap());
+  }
   let mut epochs_cursor = ctx.vsc_db.elections
     .find(filter)
     .with_options(opt)
