@@ -307,7 +307,7 @@ async fn get_tx_output(path: web::Path<String>, ctx: web::Data<Context>) -> Resu
           result.push(Some(serde_json::to_value(contract).unwrap()));
         } else if &op.id == "vsc.election_result" {
           let election = ctx.vsc_db.elections
-            .find_one(doc! { "be_info.trx_id": &trx_id }).await
+            .find_one(doc! { "tx_id": &trx_id }).await
             .map_err(|e| RespErr::DbErr { msg: e.to_string() })?;
           result.push(Some(serde_json::to_value(election).unwrap()));
         } else {
