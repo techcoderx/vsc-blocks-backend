@@ -8,7 +8,7 @@ use std::sync::Arc;
 use bv_decoder::BvWeights;
 use crate::{
   config::config,
-  types::{ hive::{ OpsInBlock, CustomJson }, vsc::{ json_to_bson, ElectionResultRecord, IndexerState, Signature } },
+  types::{ hive::{ CustomJson, TxByHash }, vsc::{ json_to_bson, ElectionResultRecord, IndexerState, Signature } },
 };
 
 #[derive(Clone)]
@@ -72,89 +72,79 @@ impl ElectionIndexer {
           }
           let epoch = ep.unwrap();
           next_num += 1;
-          let block = http_client
-            .get(
-              format!(
-                "{}/hafah-api/blocks/{}/operations?operation-types=18&page=1&page-size=2000&page-order=asc&data-size-limit=2000000&path-filter=value.id%3Dvsc.election_result",
-                config.hive_rpc.clone(),
-                epoch.block_height.to_string()
-              )
-            )
+          let tx = http_client
+            .get(format!("{}/hafah-api/transactions/{}?include-virtual=false", config.hive_rpc.clone(), epoch.tx_id.clone()))
             .send().await;
-          if block.is_err() {
-            error!("{}", block.unwrap_err());
+          if tx.is_err() {
+            error!("{}", tx.unwrap_err());
             sleep(Duration::from_secs(120)).await;
             continue 'mainloop;
           }
-          let block = block.unwrap().json::<OpsInBlock<CustomJson>>().await.unwrap();
-          'blockops: for op in block.operations_result.iter() {
-            let op = op.clone();
-            let operation = op.op.value;
-            if operation.required_auths.len() > 0 && operation.required_auths[0] == epoch.proposer {
-              let j = serde_json::from_str::<Value>(&operation.json);
-              if j.is_ok() {
-                let j = j.unwrap();
-                let net_id_valid = match j.get("net_id") {
-                  Some(n) => n.as_str().unwrap_or("") == "vsc-mainnet",
-                  None => false,
-                };
-                let data_match = match j.get("data") {
-                  Some(n) => n.as_str().unwrap_or("") == epoch.data,
-                  None => false,
-                };
-                let epoch_num_match = match j.get("epoch") {
-                  Some(n) => n.as_number().unwrap_or(&Number::from(0)).as_u64().unwrap_or(0) == epoch.epoch,
-                  None => false,
-                };
-                let signature = j.get("signature");
-                if net_id_valid && data_match && epoch_num_match {
-                  let sig_obj = match signature {
-                    Some(sig) => from_value::<Option<Signature>>(sig.clone()).unwrap_or(None),
-                    None => None,
-                  };
-                  let weights = match sig_obj {
-                    Some(sign) => {
-                      let weights = match election_db.find_one(doc! { "epoch": (next_num as i64)-1 }).await {
-                        Ok(pe) =>
-                          match pe {
-                            Some(pe) => pe.weights,
-                            None => vec![],
-                          }
-                        Err(e) => {
-                          error!("Failed to query previous epoch {}", e);
-                          sleep(Duration::from_secs(60)).await;
-                          continue 'mainloop;
-                        }
-                      };
-                      match BvWeights::from_b64url(&sign.bv, &weights) {
-                        Ok(bv) => (bv.voted_weight(), bv.eligible_weight()),
-                        Err(_) => (0, 0),
-                      }
+          let tx = tx.unwrap().json::<TxByHash<CustomJson>>().await.unwrap();
+          // there should be only one operation here
+          let j = match serde_json::from_str::<Value>(&tx.transaction_json.operations[0].value.json) {
+            Ok(json) => json,
+            Err(e) => {
+              error!("Failed to parse json, this is a fatal error likely caused by a bug in go-vsc-node. {}", e);
+              break 'mainloop;
+            }
+          };
+          let net_id_valid = match j.get("net_id") {
+            Some(n) => n.as_str().unwrap_or("") == "vsc-mainnet",
+            None => false,
+          };
+          let data_match = match j.get("data") {
+            Some(n) => n.as_str().unwrap_or("") == epoch.data,
+            None => false,
+          };
+          let epoch_num_match = match j.get("epoch") {
+            Some(n) => n.as_number().unwrap_or(&Number::from(0)).as_u64().unwrap_or(0) == epoch.epoch,
+            None => false,
+          };
+          let signature = j.get("signature");
+          if net_id_valid && data_match && epoch_num_match {
+            let sig_obj = match signature {
+              Some(sig) => from_value::<Option<Signature>>(sig.clone()).unwrap_or(None),
+              None => None,
+            };
+            let weights = match sig_obj {
+              Some(sign) => {
+                let weights = match election_db.find_one(doc! { "epoch": (next_num as i64)-1 }).await {
+                  Ok(pe) =>
+                    match pe {
+                      Some(pe) => pe.weights,
+                      None => vec![],
                     }
-                    None => (0, 0),
-                  };
-                  let up = election_db
-                    .update_one(
-                      doc! { "epoch": epoch.epoch as i64 },
-                      doc! { "$set": doc! {
-                        "be_info": doc! {
-                          "ts": &op.timestamp,
-                          "trx_id": &op.trx_id,
-                          "signature": json_to_bson(signature),
-                          "voted_weight": weights.0 as i64,
-                          "eligible_weight": weights.1 as i64
-                        }
-                      }}
-                    )
-                    .upsert(true).await;
-                  if up.is_err() {
-                    error!("Failed to update {}", up.unwrap_err());
-                    sleep(Duration::from_secs(120)).await;
+                  Err(e) => {
+                    error!("Failed to query previous epoch {}", e);
+                    sleep(Duration::from_secs(60)).await;
                     continue 'mainloop;
                   }
-                  break 'blockops;
+                };
+                match BvWeights::from_b64url(&sign.bv, &weights) {
+                  Ok(bv) => (bv.voted_weight(), bv.eligible_weight()),
+                  Err(_) => (0, 0),
                 }
               }
+              None => (0, 0),
+            };
+            let up = election_db
+              .update_one(
+                doc! { "epoch": epoch.epoch as i64 },
+                doc! { "$set": doc! {
+                  "be_info": doc! {
+                    "ts": &tx.timestamp,
+                    "signature": json_to_bson(signature),
+                    "voted_weight": weights.0 as i64,
+                    "eligible_weight": weights.1 as i64
+                  }
+                }}
+              )
+              .upsert(true).await;
+            if up.is_err() {
+              error!("Failed to update {}", up.unwrap_err());
+              sleep(Duration::from_secs(120)).await;
+              continue 'mainloop;
             }
           }
         }

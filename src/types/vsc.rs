@@ -4,7 +4,7 @@ use mongodb::bson;
 
 #[derive(Clone, Debug, Deserialize)]
 pub struct HiveBlocksSyncState {
-  pub head_height: u64,
+  pub head_height: i64,
 }
 
 #[derive(Clone, Debug, Deserialize)]
@@ -84,6 +84,7 @@ pub struct Witnesses {
   peer_id: String,
   protocol_version: i64,
   ts: String,
+  tx_id: String,
   version_id: String,
 }
 
@@ -122,6 +123,7 @@ pub struct ElectionResultRecord {
   pub total_weight: u64,
   pub block_height: u64,
   pub proposer: String,
+  pub tx_id: String,
   #[serde(rename = "type")]
   pub r#type: String,
   pub be_info: Option<ElectionExt>,
@@ -130,7 +132,6 @@ pub struct ElectionResultRecord {
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct ElectionExt {
   pub ts: String,
-  pub trx_id: String,
   pub signature: Option<Signature>,
   pub voted_weight: u64,
   pub eligible_weight: u64,
