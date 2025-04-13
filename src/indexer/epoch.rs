@@ -138,7 +138,7 @@ impl ElectionIndexer {
           }
           match witness_stats.find_one(doc! { "_id": &epoch.proposer }).await {
             Ok(last_stat) => {
-              if last_stat.is_none() || (last_stat.unwrap().last_epoch as u64) < epoch.epoch {
+              if last_stat.is_none() || (last_stat.unwrap().last_epoch.unwrap_or(-1) as i64) < epoch.epoch {
                 let _ = witness_stats
                   .update_one(
                     doc! { "_id": &epoch.proposer },

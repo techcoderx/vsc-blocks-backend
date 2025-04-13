@@ -155,12 +155,12 @@ impl BlockIndexer {
           }
           match witness_stats.find_one(doc! { "_id": &block.proposer }).await {
             Ok(last_stat) => {
-              if last_stat.is_none() || (last_stat.unwrap().last_block as u32) < next_nums.1 {
+              if last_stat.is_none() || (last_stat.unwrap().last_block.unwrap_or(0) as u32) < next_nums.1 {
                 let _ = witness_stats
                   .update_one(
                     doc! { "_id": &block.proposer },
                     doc! {
-                    "$set": doc! {"last_epoch": next_nums.1 as i32},
+                    "$set": doc! {"last_block": next_nums.1 as i32},
                     "$inc": doc! {"block_count": 1}
                   }
                   )

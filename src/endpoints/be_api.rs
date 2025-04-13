@@ -103,7 +103,13 @@ async fn get_witness_stats(path: web::Path<String>, ctx: web::Data<Context>) -> 
   let stats = ctx.vsc_db.witness_stats
     .find_one(doc! { "_id": &user }).await
     .map_err(|e| RespErr::DbErr { msg: e.to_string() })?
-    .unwrap_or(WitnessStat { proposer: user.clone(), block_count: 0, election_count: 0, last_block: -1, last_epoch: -1 });
+    .unwrap_or(WitnessStat {
+      proposer: user.clone(),
+      block_count: Some(0),
+      election_count: Some(0),
+      last_block: Some(-1),
+      last_epoch: Some(-1),
+    });
   Ok(HttpResponse::Ok().json(stats))
 }
 

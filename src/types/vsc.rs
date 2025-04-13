@@ -92,10 +92,10 @@ pub struct Witnesses {
 pub struct WitnessStat {
   #[serde(rename = "_id")]
   pub proposer: String,
-  pub block_count: i32,
-  pub election_count: i32,
-  pub last_block: i32,
-  pub last_epoch: i32,
+  pub block_count: Option<i32>,
+  pub election_count: Option<i32>,
+  pub last_block: Option<i32>,
+  pub last_epoch: Option<i32>,
 }
 
 #[derive(Clone, Serialize, Deserialize)]
@@ -124,7 +124,7 @@ pub struct ElectionMember {
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct ElectionResultRecord {
-  pub epoch: u64,
+  pub epoch: i64,
   pub net_id: String,
   pub data: String,
   pub members: Vec<ElectionMember>,
