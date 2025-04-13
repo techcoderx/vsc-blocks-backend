@@ -56,7 +56,8 @@ async fn main() -> std::io::Result<()> {
       http_client.clone(),
       vsc_db.blocks.clone(),
       vsc_db.elections.clone(),
-      vsc_db.indexer2.clone()
+      vsc_db.indexer2.clone(),
+      vsc_db.witness_stats.clone()
     );
     idxer.start();
   }
@@ -90,6 +91,7 @@ async fn main() -> std::io::Result<()> {
           .service(be_api::props)
           .service(be_api::list_witnesses)
           .service(be_api::get_witness)
+          .service(be_api::get_witness_stats)
           .service(be_api::get_balance)
           .service(be_api::list_epochs)
           .service(be_api::get_epoch)

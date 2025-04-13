@@ -8,7 +8,10 @@ use std::sync::Arc;
 use bv_decoder::BvWeights;
 use crate::{
   config::config,
-  types::{ hive::{ CustomJson, TxByHash }, vsc::{ json_to_bson, BlockHeaderRecord, IndexerState, ElectionResultRecord } },
+  types::{
+    hive::{ CustomJson, TxByHash },
+    vsc::{ json_to_bson, BlockHeaderRecord, ElectionResultRecord, IndexerState, WitnessStat },
+  },
 };
 
 #[derive(Clone)]
@@ -17,6 +20,7 @@ pub struct BlockIndexer {
   blocks_db: Collection<BlockHeaderRecord>,
   elections_db: Collection<ElectionResultRecord>,
   indexer2: Collection<IndexerState>,
+  witness_stats: Collection<WitnessStat>,
   is_running: Arc<RwLock<bool>>,
 }
 
@@ -25,9 +29,17 @@ impl BlockIndexer {
     http_client: reqwest::Client,
     blocks_db: Collection<BlockHeaderRecord>,
     elections_db: Collection<ElectionResultRecord>,
-    indexer2: Collection<IndexerState>
+    indexer2: Collection<IndexerState>,
+    witness_stats: Collection<WitnessStat>
   ) -> BlockIndexer {
-    return BlockIndexer { http_client, blocks_db, elections_db, indexer2, is_running: Arc::new(RwLock::new(false)) };
+    return BlockIndexer {
+      http_client,
+      blocks_db,
+      elections_db,
+      indexer2,
+      witness_stats,
+      is_running: Arc::new(RwLock::new(false)),
+    };
   }
 
   pub fn start(&self) {
@@ -35,6 +47,7 @@ impl BlockIndexer {
     let blocks_db = self.blocks_db.clone();
     let election_db = self.elections_db.clone();
     let indexer2 = self.indexer2.clone();
+    let witness_stats = self.witness_stats.clone();
     let running = Arc::clone(&self.is_running);
 
     tokio::spawn(async move {
@@ -139,6 +152,20 @@ impl BlockIndexer {
             error!("Failed to update {}", up.unwrap_err());
             sleep(Duration::from_secs(120)).await;
             continue 'mainloop;
+          }
+          match witness_stats.find_one(doc! { "_id": &block.proposer }).await {
+            Ok(last_stat) => {
+              if last_stat.is_none() || (last_stat.unwrap().last_block as u32) < next_nums.1 {
+                let _ = witness_stats.update_one(
+                  doc! { "_id": &block.proposer },
+                  doc! {
+                    "$set": doc! {"last_epoch": next_nums.1 as i32},
+                    "$inc": doc! {"block_count": 1}
+                  }
+                ).await;
+              }
+            }
+            Err(_) => (),
           }
           next_nums.0 = block.slot_height;
         }

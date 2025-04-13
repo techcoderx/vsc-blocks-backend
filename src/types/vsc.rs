@@ -89,6 +89,16 @@ pub struct Witnesses {
 }
 
 #[derive(Clone, Serialize, Deserialize)]
+pub struct WitnessStat {
+  #[serde(rename = "_id")]
+  pub proposer: String,
+  pub block_count: i32,
+  pub election_count: i32,
+  pub last_block: i32,
+  pub last_epoch: i32,
+}
+
+#[derive(Clone, Serialize, Deserialize)]
 pub struct Contract {
   pub id: String,
   pub code: String,

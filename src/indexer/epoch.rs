@@ -8,7 +8,7 @@ use std::sync::Arc;
 use bv_decoder::BvWeights;
 use crate::{
   config::config,
-  types::{ hive::{ CustomJson, TxByHash }, vsc::{ json_to_bson, ElectionResultRecord, IndexerState, Signature } },
+  types::{ hive::{ CustomJson, TxByHash }, vsc::{ json_to_bson, ElectionResultRecord, IndexerState, Signature, WitnessStat } },
 };
 
 #[derive(Clone)]
@@ -16,6 +16,7 @@ pub struct ElectionIndexer {
   http_client: reqwest::Client,
   elections_db: Collection<ElectionResultRecord>,
   indexer2: Collection<IndexerState>,
+  witness_stats: Collection<WitnessStat>,
   is_running: Arc<RwLock<bool>>,
 }
 
@@ -23,15 +24,17 @@ impl ElectionIndexer {
   pub fn init(
     http_client: reqwest::Client,
     elections_db: Collection<ElectionResultRecord>,
-    indexer2: Collection<IndexerState>
+    indexer2: Collection<IndexerState>,
+    witness_stats: Collection<WitnessStat>
   ) -> ElectionIndexer {
-    return ElectionIndexer { http_client, elections_db, indexer2, is_running: Arc::new(RwLock::new(false)) };
+    return ElectionIndexer { http_client, elections_db, indexer2, witness_stats, is_running: Arc::new(RwLock::new(false)) };
   }
 
   pub fn start(&self) {
     let http_client = self.http_client.clone();
     let election_db = self.elections_db.clone();
     let indexer2 = self.indexer2.clone();
+    let witness_stats = self.witness_stats.clone();
     let running = Arc::clone(&self.is_running);
 
     tokio::spawn(async move {
@@ -145,6 +148,20 @@ impl ElectionIndexer {
               error!("Failed to update {}", up.unwrap_err());
               sleep(Duration::from_secs(120)).await;
               continue 'mainloop;
+            }
+            match witness_stats.find_one(doc! { "_id": &epoch.proposer }).await {
+              Ok(last_stat) => {
+                if last_stat.is_none() || (last_stat.unwrap().last_epoch as u64) < epoch.epoch {
+                  let _ = witness_stats.update_one(
+                    doc! { "_id": &epoch.proposer },
+                    doc! {
+                      "$set": doc! {"last_epoch": epoch.epoch as i32},
+                      "$inc": doc! {"election_count": 1}
+                    }
+                  ).await;
+                }
+              }
+              Err(_) => (),
             }
           }
         }

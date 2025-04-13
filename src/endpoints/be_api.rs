@@ -6,7 +6,7 @@ use serde_json::{ json, Value };
 use std::cmp::{ min, max };
 use crate::{
   config::config,
-  types::{ hive::{ CustomJson, TxByHash }, server::{ Context, RespErr }, vsc::{ LedgerBalance, RcUsedAtHeight } },
+  types::{ hive::{ CustomJson, TxByHash }, server::{ Context, RespErr }, vsc::{ LedgerBalance, RcUsedAtHeight, WitnessStat } },
 };
 
 #[get("")]
@@ -95,6 +95,16 @@ async fn get_witness(path: web::Path<String>, ctx: web::Data<Context>) -> Result
     Some(wit) => Ok(HttpResponse::Ok().json(wit)),
     None => Ok(HttpResponse::NotFound().json(json!({"error": "witness does not exist"}))),
   }
+}
+
+#[get("/witness/{username}/stats")]
+async fn get_witness_stats(path: web::Path<String>, ctx: web::Data<Context>) -> Result<HttpResponse, RespErr> {
+  let user = path.into_inner();
+  let stats = ctx.vsc_db.witness_stats
+    .find_one(doc! { "_id": &user }).await
+    .map_err(|e| RespErr::DbErr { msg: e.to_string() })?
+    .unwrap_or(WitnessStat { proposer: user.clone(), block_count: 0, election_count: 0, last_block: -1, last_epoch: -1 });
+  Ok(HttpResponse::Ok().json(stats))
 }
 
 #[get("/balance/{username}")]
