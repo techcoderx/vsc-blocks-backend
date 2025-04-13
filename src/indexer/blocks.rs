@@ -156,13 +156,15 @@ impl BlockIndexer {
           match witness_stats.find_one(doc! { "_id": &block.proposer }).await {
             Ok(last_stat) => {
               if last_stat.is_none() || (last_stat.unwrap().last_block as u32) < next_nums.1 {
-                let _ = witness_stats.update_one(
-                  doc! { "_id": &block.proposer },
-                  doc! {
+                let _ = witness_stats
+                  .update_one(
+                    doc! { "_id": &block.proposer },
+                    doc! {
                     "$set": doc! {"last_epoch": next_nums.1 as i32},
                     "$inc": doc! {"block_count": 1}
                   }
-                ).await;
+                  )
+                  .upsert(true).await;
               }
             }
             Err(_) => (),

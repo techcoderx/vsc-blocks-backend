@@ -1,5 +1,5 @@
 use futures_util::StreamExt;
-use serde_json::{ Value, Number, from_value };
+use serde_json::{ Value, from_value };
 use tokio::{ time::{ sleep, Duration }, sync::RwLock };
 use mongodb::{ bson::doc, Collection };
 use reqwest;
@@ -92,49 +92,36 @@ impl ElectionIndexer {
               break 'mainloop;
             }
           };
-          let net_id_valid = match j.get("net_id") {
-            Some(n) => n.as_str().unwrap_or("") == "vsc-mainnet",
-            None => false,
-          };
-          let data_match = match j.get("data") {
-            Some(n) => n.as_str().unwrap_or("") == epoch.data,
-            None => false,
-          };
-          let epoch_num_match = match j.get("epoch") {
-            Some(n) => n.as_number().unwrap_or(&Number::from(0)).as_u64().unwrap_or(0) == epoch.epoch,
-            None => false,
-          };
           let signature = j.get("signature");
-          if net_id_valid && data_match && epoch_num_match {
-            let sig_obj = match signature {
-              Some(sig) => from_value::<Option<Signature>>(sig.clone()).unwrap_or(None),
-              None => None,
-            };
-            let weights = match sig_obj {
-              Some(sign) => {
-                let weights = match election_db.find_one(doc! { "epoch": (next_num as i64)-1 }).await {
-                  Ok(pe) =>
-                    match pe {
-                      Some(pe) => pe.weights,
-                      None => vec![],
-                    }
-                  Err(e) => {
-                    error!("Failed to query previous epoch {}", e);
-                    sleep(Duration::from_secs(60)).await;
-                    continue 'mainloop;
+          let sig_obj = match signature {
+            Some(sig) => from_value::<Option<Signature>>(sig.clone()).unwrap_or(None),
+            None => None,
+          };
+          let weights = match sig_obj {
+            Some(sign) => {
+              let weights = match election_db.find_one(doc! { "epoch": (next_num as i64)-1 }).await {
+                Ok(pe) =>
+                  match pe {
+                    Some(pe) => pe.weights,
+                    None => vec![],
                   }
-                };
-                match BvWeights::from_b64url(&sign.bv, &weights) {
-                  Ok(bv) => (bv.voted_weight(), bv.eligible_weight()),
-                  Err(_) => (0, 0),
+                Err(e) => {
+                  error!("Failed to query previous epoch {}", e);
+                  sleep(Duration::from_secs(60)).await;
+                  continue 'mainloop;
                 }
+              };
+              match BvWeights::from_b64url(&sign.bv, &weights) {
+                Ok(bv) => (bv.voted_weight(), bv.eligible_weight()),
+                Err(_) => (0, 0),
               }
-              None => (0, 0),
-            };
-            let up = election_db
-              .update_one(
-                doc! { "epoch": epoch.epoch as i64 },
-                doc! { "$set": doc! {
+            }
+            None => (0, 0),
+          };
+          let up = election_db
+            .update_one(
+              doc! { "epoch": epoch.epoch as i64 },
+              doc! { "$set": doc! {
                   "be_info": doc! {
                     "ts": &tx.timestamp,
                     "signature": json_to_bson(signature),
@@ -142,27 +129,28 @@ impl ElectionIndexer {
                     "eligible_weight": weights.1 as i64
                   }
                 }}
-              )
-              .upsert(true).await;
-            if up.is_err() {
-              error!("Failed to update {}", up.unwrap_err());
-              sleep(Duration::from_secs(120)).await;
-              continue 'mainloop;
-            }
-            match witness_stats.find_one(doc! { "_id": &epoch.proposer }).await {
-              Ok(last_stat) => {
-                if last_stat.is_none() || (last_stat.unwrap().last_epoch as u64) < epoch.epoch {
-                  let _ = witness_stats.update_one(
+            )
+            .upsert(true).await;
+          if up.is_err() {
+            error!("Failed to update {}", up.unwrap_err());
+            sleep(Duration::from_secs(120)).await;
+            continue 'mainloop;
+          }
+          match witness_stats.find_one(doc! { "_id": &epoch.proposer }).await {
+            Ok(last_stat) => {
+              if last_stat.is_none() || (last_stat.unwrap().last_epoch as u64) < epoch.epoch {
+                let _ = witness_stats
+                  .update_one(
                     doc! { "_id": &epoch.proposer },
                     doc! {
                       "$set": doc! {"last_epoch": epoch.epoch as i32},
                       "$inc": doc! {"election_count": 1}
                     }
-                  ).await;
-                }
+                  )
+                  .upsert(true).await;
               }
-              Err(_) => (),
             }
+            Err(_) => (),
           }
         }
         let upd_state = indexer2.update_one(doc! { "_id": 0 }, doc! { "$set": doc! { "epoch": next_num } }).upsert(true).await;
