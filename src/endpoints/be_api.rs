@@ -105,10 +105,10 @@ async fn get_witness_stats(path: web::Path<String>, ctx: web::Data<Context>) -> 
     .map_err(|e| RespErr::DbErr { msg: e.to_string() })?
     .unwrap_or(WitnessStat {
       proposer: user.clone(),
-      block_count: Some(0),
-      election_count: Some(0),
-      last_block: Some(-1),
-      last_epoch: Some(-1),
+      block_count: None,
+      election_count: None,
+      last_block: None,
+      last_epoch: None,
     });
   Ok(HttpResponse::Ok().json(stats))
 }
