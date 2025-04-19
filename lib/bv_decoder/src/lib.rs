@@ -46,8 +46,13 @@ impl BvWeights {
   pub fn voted_weight(&self) -> u64 {
     let mut voted: u64 = 0;
     for i in 0..self.weights.len() {
-      if self.bv.get(self.bv.len() - 1 - i).unwrap_or(false) {
-        voted += self.weights.get(i).unwrap_or(&0).clone();
+      match self.bv.len().checked_sub(i + 1) {
+        Some(pos) => {
+          if self.bv.get(pos).unwrap_or(false) {
+            voted += self.weights.get(i).unwrap_or(&0).clone();
+          }
+        }
+        None => (),
       }
     }
     return voted;
@@ -160,6 +165,75 @@ mod tests {
       2106080,
       2000000,
       2049738,
+      2000000,
+      2000000
+    ];
+    assert_eq!(BvWeights::from_bitvec(result, &weights).voted_weight(), 37240018);
+  }
+
+  #[test]
+  fn test_block138_25_members() {
+    let input = "B__7";
+    let result = b64url_to_bitvec(input).unwrap();
+    let mut expected = BitVec::new();
+    // 25 witnesses total, the last 6 witnesses did not attest
+    // bv: 00000011 11111111 11111101 1
+    let bits = vec![
+      false,
+      false,
+      false,
+      false,
+      false,
+      true,
+      true,
+      true,
+      true,
+      true,
+      true,
+      true,
+      true,
+      true,
+      true,
+      true,
+      true,
+      true,
+      true,
+      true,
+      true,
+      false,
+      true,
+      true
+    ];
+    expected.extend(bits.iter().copied());
+
+    assert_eq!(result, expected);
+    assert_eq!(result.len(), 24);
+
+    // weights for epoch 23 extended to 25 members
+    let weights = vec![
+      2000000,
+      2000000,
+      2000000,
+      2000000,
+      2000100,
+      2000000,
+      2950000,
+      2007000,
+      2025000,
+      2000000,
+      2000100,
+      2100000,
+      2000000,
+      2000000,
+      2002000,
+      2106080,
+      2000000,
+      2049738,
+      2000000,
+      2000000,
+      2000000,
+      2000000,
+      2000000,
       2000000,
       2000000
     ];
