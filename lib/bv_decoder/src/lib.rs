@@ -68,6 +68,7 @@ mod tests {
     // Manually create expected bits
     let mut expected = BitVec::new();
     // this block has 21 witnesses eligible, but the function pad it with 3 extra zeros so there's 24 bits here
+    // bv: 11101111 10011111 11110
     let bits = vec![
       false,
       false,
@@ -99,6 +100,70 @@ mod tests {
     assert_eq!(result, expected);
     assert_eq!(result.len(), 24);
     assert_eq!(BvWeights::from_bitvec(result, &vec![10; 21]).voted_weight(), 170);
+  }
+
+  #[test]
+  fn test_block138() {
+    let input = "B__7";
+    let result = b64url_to_bitvec(input).unwrap();
+    let mut expected = BitVec::new();
+    // 20 witnesses total, the last witness "vaultec.vsc" did not attest
+    // bv: 01111111 11111111 1011
+    let bits = vec![
+      false,
+      false,
+      false,
+      false,
+      false,
+      true,
+      true,
+      true,
+      true,
+      true,
+      true,
+      true,
+      true,
+      true,
+      true,
+      true,
+      true,
+      true,
+      true,
+      true,
+      true,
+      false,
+      true,
+      true
+    ];
+    expected.extend(bits.iter().copied());
+
+    assert_eq!(result, expected);
+    assert_eq!(result.len(), 24);
+
+    // weights for epoch 23
+    let weights = vec![
+      2000000,
+      2000000,
+      2000000,
+      2000000,
+      2000100,
+      2000000,
+      2950000,
+      2007000,
+      2025000,
+      2000000,
+      2000100,
+      2100000,
+      2000000,
+      2000000,
+      2002000,
+      2106080,
+      2000000,
+      2049738,
+      2000000,
+      2000000
+    ];
+    assert_eq!(BvWeights::from_bitvec(result, &weights).voted_weight(), 37240018);
   }
 
   #[test]
