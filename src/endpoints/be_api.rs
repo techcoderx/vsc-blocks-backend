@@ -6,7 +6,11 @@ use serde_json::{ json, Value };
 use std::cmp::{ min, max };
 use crate::{
   config::config,
-  types::{ hive::{ CustomJson, TxByHash }, server::{ Context, RespErr }, vsc::{ LedgerBalance, RcUsedAtHeight, WitnessStat } },
+  types::{
+    hive::{ CustomJson, TxByHash },
+    server::{ Context, RespErr },
+    vsc::{ BridgeStats, LedgerBalance, RcUsedAtHeight, WitnessStat },
+  },
 };
 
 #[get("")]
@@ -369,6 +373,15 @@ async fn get_contract(path: web::Path<String>, ctx: web::Data<Context>) -> Resul
   match contract {
     Some(c) => { Ok(HttpResponse::Ok().json(c)) }
     None => Ok(HttpResponse::NotFound().json(json!({"error": "Contract does not exist"}))),
+  }
+}
+
+#[get("/bridge/stats")]
+async fn bridge_stats(ctx: web::Data<Context>) -> Result<HttpResponse, RespErr> {
+  let stats = ctx.vsc_db.bridge_stats.find_one(doc! { "_id": 0 }).await.map_err(|e| RespErr::DbErr { msg: e.to_string() })?;
+  match stats {
+    Some(s) => Ok(HttpResponse::Ok().json(s)),
+    None => Ok(HttpResponse::Ok().json(BridgeStats { deposits: 0, withdrawals: 0 })),
   }
 }
 

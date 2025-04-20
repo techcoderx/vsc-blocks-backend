@@ -3,10 +3,12 @@ use std::error::Error;
 use log::info;
 use crate::types::vsc::{
   BlockHeaderRecord,
+  BridgeStats,
   Contract,
   ElectionResultRecord,
   HiveBlocksSyncState,
   IndexerState,
+  Ledger,
   LedgerActions,
   LedgerBalance,
   RcUsedAtHeight,
@@ -25,9 +27,11 @@ pub struct MongoDB {
   pub tx_pool: Collection<TransactionRecord>,
   pub balances: Collection<LedgerBalance>,
   pub ledger_actions: Collection<LedgerActions>,
+  pub ledger: Collection<Ledger>,
   pub rc: Collection<RcUsedAtHeight>,
   pub indexer2: Collection<IndexerState>,
   pub witness_stats: Collection<WitnessStat>,
+  pub bridge_stats: Collection<BridgeStats>,
 }
 
 impl MongoDB {
@@ -46,9 +50,11 @@ impl MongoDB {
       tx_pool: db.collection("transaction_pool"),
       balances: db.collection("ledger_balances"),
       ledger_actions: db.collection("ledger_actions"),
+      ledger: db.collection("ledger"),
       rc: db.collection("rcs"),
       indexer2: db2.collection("indexer_state"),
       witness_stats: db2.collection("witness_stats"),
+      bridge_stats: db2.collection("bridge_stats"),
     })
   }
 }

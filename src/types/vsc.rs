@@ -15,6 +15,12 @@ pub struct IndexerState {
 }
 
 #[derive(Clone, Serialize, Deserialize)]
+pub struct BridgeStats {
+  pub deposits: i64,
+  pub withdrawals: i64,
+}
+
+#[derive(Clone, Serialize, Deserialize)]
 pub struct LedgerBalance {
   pub account: String,
   pub block_height: u64,
@@ -40,6 +46,18 @@ pub struct LedgerActions {
   pub to: String,
   #[serde(rename = "type")]
   pub r#type: String,
+}
+
+#[derive(Clone, Serialize, Deserialize)]
+pub struct Ledger {
+  pub id: String,
+  pub from: String,
+  pub owner: String,
+  pub amount: u64,
+  #[serde(rename = "tk")]
+  pub asset: String,
+  pub block_height: u64,
+  pub t: String,
 }
 
 #[derive(Clone, Serialize, Deserialize)]

@@ -56,8 +56,11 @@ async fn main() -> std::io::Result<()> {
       http_client.clone(),
       vsc_db.blocks.clone(),
       vsc_db.elections.clone(),
+      vsc_db.ledger.clone(),
+      vsc_db.ledger_actions.clone(),
       vsc_db.indexer2.clone(),
-      vsc_db.witness_stats.clone()
+      vsc_db.witness_stats.clone(),
+      vsc_db.bridge_stats.clone()
     );
     idxer.start();
   }
@@ -100,6 +103,7 @@ async fn main() -> std::io::Result<()> {
           .service(be_api::get_tx_output)
           .service(be_api::list_contracts)
           .service(be_api::get_contract)
+          .service(be_api::bridge_stats)
           .service(be_api::search)
       )
   })
