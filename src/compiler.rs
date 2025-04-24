@@ -1,5 +1,7 @@
+use bson::doc;
+use mongodb::options::FindOneOptions;
+use mongodb::results::UpdateResult;
 use tokio::sync::Mutex;
-use tokio_postgres::types::Type;
 use bollard::Docker;
 use bollard::container::{ Config, CreateContainerOptions, WaitContainerOptions };
 use bollard::models::{ HostConfig, ContainerWaitResponse };
@@ -9,7 +11,9 @@ use chrono::Utc;
 use ipfs_dag::put_dag;
 use std::{ error::Error, fs, path::Path, process, sync::Arc };
 use log::{ info, debug, error };
-use crate::db::DbPool;
+use crate::mongo::MongoDB;
+use crate::types::cv::{ CVContractCode, CVStatus };
+use crate::types::vsc::json_to_bson;
 
 fn delete_if_exists(path: &str) -> Result<(), Box<dyn Error>> {
   let p = Path::new(path);
@@ -38,9 +42,13 @@ fn delete_dir_contents(read_dir_res: Result<fs::ReadDir, std::io::Error>) {
   }
 }
 
+async fn update_status(db: &MongoDB, addr: &str, status: CVStatus) -> Result<UpdateResult, mongodb::error::Error> {
+  db.clone().cv_contracts.update_one(doc! { "_id": addr }, doc! { "$set": {"status": status.to_string() } }).await
+}
+
 #[derive(Clone)]
 pub struct Compiler {
-  db: DbPool,
+  db: MongoDB,
   running: Arc<Mutex<bool>>,
   docker: Arc<Docker>,
   image: String,
@@ -48,7 +56,7 @@ pub struct Compiler {
 }
 
 impl Compiler {
-  pub fn init(db_pool: &DbPool, image: String, compiler_dir: String) -> Self {
+  pub fn init(db: &MongoDB, image: String, compiler_dir: String) -> Self {
     let docker = match Docker::connect_with_local_defaults() {
       Ok(d) => d,
       Err(e) => {
@@ -56,7 +64,13 @@ impl Compiler {
         process::exit(1)
       }
     };
-    return Compiler { db: db_pool.clone(), running: Arc::new(Mutex::new(false)), docker: Arc::new(docker), image, compiler_dir };
+    return Compiler {
+      db: db.clone(),
+      running: Arc::new(Mutex::new(false)),
+      docker: Arc::new(docker),
+      image,
+      compiler_dir,
+    };
   }
 
   pub fn notify(&self) {
@@ -78,50 +92,63 @@ impl Compiler {
       let mut r = running.lock().await;
       *r = true;
       'mainloop: loop {
-        let next_contract = db.query(
-          "SELECT contract_addr, bytecode_cid, lang, dependencies FROM vsc_cv.contracts WHERE status = 1::SMALLINT ORDER BY request_ts ASC LIMIT 1",
-          &[]
-        ).await;
+        let opt = FindOneOptions::builder()
+          .sort(doc! { "request_ts": 1 })
+          .build();
+        let next_contract = db.cv_contracts.find_one(doc! { "status": "queued" }).with_options(opt).await;
         if next_contract.is_err() {
-          error!("Failed to get next contract in queue: {}", next_contract.unwrap_err());
+          error!("Failed to get next contract in queue");
           break;
         }
         let next_contract = next_contract.unwrap();
-        if next_contract.len() == 0 {
+        if next_contract.is_none() {
           break;
         }
-        let next_addr: &str = next_contract[0].get(0);
+        let next_contract = next_contract.unwrap();
+        let next_addr: &str = &next_contract.id;
         info!("Compiling contract {}", next_addr);
-        let files = db.query(
-          "SELECT fname, content FROM vsc_cv.source_code WHERE contract_addr=$1;",
-          &[(&next_addr, Type::VARCHAR)]
-        ).await;
+        let _ = update_status(&db, next_addr, CVStatus::InProgress).await;
+        let files = db.cv_source_codes.find(doc! { "addr": next_addr }).await;
         if files.is_err() {
           error!("Failed to retrieve files: {}", files.unwrap_err());
           break;
         }
-        let files = files.unwrap();
-        if files.len() == 0 {
-          // this should not happen
-          // TODO: we should probably update the status to failed
-          error!("Contract returned 0 files");
-          break;
-        }
-        for f in files {
-          let written = fs::write(format!("{}/src/{}", compiler_dir, f.get::<usize, &str>(0)), f.get::<usize, &str>(1));
-          if written.is_err() {
-            break 'mainloop;
+        let mut files_cursor = files.unwrap();
+        let mut file_count = 0;
+        while let Some(f) = files_cursor.next().await {
+          match f {
+            Ok(file) => {
+              let written = fs::write(format!("{}/src/{}", compiler_dir, file.fname), file.content);
+              if written.is_err() {
+                let _ = update_status(&db, next_addr, CVStatus::Failed).await;
+                error!("Failed to write files for contract {}", next_addr);
+                break 'mainloop;
+              }
+              file_count += 1;
+            }
+            Err(_) => {
+              let _ = update_status(&db, next_addr, CVStatus::Failed).await;
+              error!("Failed to parse files for contract {}", next_addr);
+              break 'mainloop;
+            }
           }
         }
-        if next_contract[0].get::<usize, i16>(2) == 0 {
+        if file_count == 0 {
+          // this should not happen
+          let _ = update_status(&db, next_addr, CVStatus::Failed).await;
+          error!("There are no files to compile");
+          break 'mainloop;
+        }
+        if &next_contract.lang == "assemblyscript" {
           // assemblyscript
           let cont_name = "as-compiler";
           let mut pkg_json: serde_json::Value = serde_json
             ::from_str(include_str!("../as_compiler/package-template.json"))
             .unwrap();
-          pkg_json["dependencies"] = next_contract[0].get::<usize, serde_json::Value>(3);
+          pkg_json["dependencies"] = next_contract.dependencies.unwrap();
           let pkg_json_w = fs::write(format!("{}/package.json", compiler_dir), serde_json::to_string_pretty(&pkg_json).unwrap());
           if pkg_json_w.is_err() {
+            let _ = update_status(&db, next_addr, CVStatus::Failed).await;
             break;
           }
           // run the compiler
@@ -150,34 +177,29 @@ impl Compiler {
             if status_code == 0 {
               let output = fs::read(format!("{}/build/build.wasm", compiler_dir));
               if output.is_err() {
+                let _ = update_status(&db, next_addr, CVStatus::Failed).await;
                 error!("build.wasm not found");
                 break;
               }
               let output = output.unwrap();
               let output_cid = put_dag(output.as_slice());
-              let cid_match = output_cid == next_contract[0].get::<usize, String>(1);
+              let cid_match = &output_cid == &next_contract.bytecode_cid;
               info!("Contract bytecode match: {}", cid_match.to_string().to_ascii_uppercase());
               if cid_match {
                 let exports: serde_json::Value = serde_json
                   ::from_str(fs::read_to_string(format!("{}/build/exports.json", compiler_dir)).unwrap().as_str())
                   .unwrap();
-                let _ = db
-                  .query(
-                    "INSERT INTO vsc_cv.source_code(contract_addr, fname, is_lockfile, content) VALUES ($1,$2,true,$3);",
-                    &[
-                      (&next_addr, Type::VARCHAR),
-                      (&"pnpm-lock.yaml".to_string(), Type::VARCHAR),
-                      (&fs::read_to_string(format!("{}/pnpm-lock.yaml", compiler_dir)).unwrap(), Type::VARCHAR),
-                    ]
-                  ).await
+                let _ = db.cv_source_codes
+                  .insert_one(CVContractCode {
+                    addr: String::from(next_addr),
+                    fname: String::from("pnpm-lock.yaml"),
+                    is_lockfile: true,
+                    content: fs::read_to_string(format!("{}/pnpm-lock.yaml", compiler_dir)).unwrap(),
+                  }).await
                   .map_err(|e| { error!("Failed to insert pnpm-lock.yaml: {}", e) });
-                let updated_status = db.query(
-                  "UPDATE vsc_cv.contracts SET status=3::SMALLINT, exports=$2::JSONB, verified_ts=$3 WHERE contract_addr=$1;",
-                  &[
-                    (&next_addr, Type::VARCHAR),
-                    (&exports, Type::JSONB),
-                    (&Utc::now().naive_utc(), Type::TIMESTAMP),
-                  ]
+                let updated_status = db.cv_contracts.update_one(
+                  doc! { "_id": String::from(next_addr) },
+                  doc! { "$set": {"status": CVStatus::Success.to_string(), "exports": json_to_bson(Some(&exports)), "verified_ts": bson::DateTime::from_chrono(Utc::now())} }
                 ).await;
                 if updated_status.is_err() {
                   error!("Failed to update status after compilation: {}", updated_status.unwrap_err());
@@ -185,20 +207,14 @@ impl Compiler {
                 }
                 debug!("Exports: {}", exports);
               } else {
-                let updated_status = db.query(
-                  "UPDATE vsc_cv.contracts SET status=5::SMALLINT WHERE contract_addr=$1;",
-                  &[(&next_addr, Type::VARCHAR)]
-                ).await;
+                let updated_status = update_status(&db, next_addr, CVStatus::NotMatch).await;
                 if updated_status.is_err() {
                   error!("Failed to update status for bytecode mismatch: {}", updated_status.unwrap_err());
                   break;
                 }
               }
             } else {
-              let updated_status = db.query(
-                "UPDATE vsc_cv.contracts SET status=4::SMALLINT WHERE contract_addr=$1;",
-                &[(&next_addr, Type::VARCHAR)]
-              ).await;
+              let updated_status = update_status(&db, next_addr, CVStatus::Failed).await;
               if updated_status.is_err() {
                 error!("Failed to update status after failed compilation: {}", updated_status.unwrap_err());
                 break;

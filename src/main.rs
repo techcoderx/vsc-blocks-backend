@@ -7,7 +7,6 @@ use std::process;
 use log::{ error, info };
 mod config;
 mod constants;
-mod db;
 mod mongo;
 mod types;
 mod endpoints;
@@ -27,44 +26,37 @@ async fn main() -> std::io::Result<()> {
   }
   env_logger::init();
   info!("Version: {}", env!("CARGO_PKG_VERSION"));
-  let db_pool = match db::DbPool::init(config.psql_url.clone()) {
-    Ok(p) => p,
+  let db = match mongo::MongoDB::init(config.mongo_url.clone()).await {
+    Ok(d) => d,
     Err(e) => {
-      error!("Failed to initialize db pool: {}", e.to_string());
+      error!("Failed to initialize database: {}", e.to_string());
       process::exit(1);
     }
   };
-  match db_pool.setup().await {
+  match db.setup().await {
     Ok(_) => (),
     Err(e) => {
-      error!("Failed to setup db: {}", e.to_string());
+      error!("Failed to setup database: {}", e.to_string());
       process::exit(1);
     }
   }
-  let vsc_db = match mongo::MongoDB::init(config.mongo_url.clone()).await {
-    Ok(d) => d,
-    Err(e) => {
-      error!("Failed to initialize VSC db pool: {}", e.to_string());
-      process::exit(1);
-    }
-  };
-  let compiler = compiler::Compiler::init(&db_pool, config.ascompiler.image.clone(), config.ascompiler.src_dir.clone());
+  let compiler = compiler::Compiler::init(&db, config.ascompiler.image.clone(), config.ascompiler.src_dir.clone());
   compiler.notify();
   let http_client = reqwest::Client::new();
   if config.be_indexer.unwrap_or(false) {
     let idxer = indexer::indexer::Indexer::init(
       http_client.clone(),
-      vsc_db.blocks.clone(),
-      vsc_db.elections.clone(),
-      vsc_db.ledger.clone(),
-      vsc_db.ledger_actions.clone(),
-      vsc_db.indexer2.clone(),
-      vsc_db.witness_stats.clone(),
-      vsc_db.bridge_stats.clone()
+      db.blocks.clone(),
+      db.elections.clone(),
+      db.ledger.clone(),
+      db.ledger_actions.clone(),
+      db.indexer2.clone(),
+      db.witness_stats.clone(),
+      db.bridge_stats.clone()
     );
     idxer.start();
   }
-  let server_ctx = Context { db: db_pool, vsc_db, compiler, http_client: http_client.clone() };
+  let server_ctx = Context { db, compiler, http_client: http_client.clone() };
   HttpServer::new(move || {
     let cors = Cors::default().allow_any_origin().allow_any_method().allow_any_header().max_age(3600);
     App::new()
@@ -85,7 +77,6 @@ async fn main() -> std::io::Result<()> {
           .service(cv_api::contract_files_ls)
           .service(cv_api::contract_files_cat)
           .service(cv_api::contract_files_cat_all)
-          .service(cv_api::bytecode_lookup_addr)
       )
       .service(
         web

@@ -1,17 +1,24 @@
 use actix_web::{ get, post, web, HttpRequest, HttpResponse, Responder };
 use actix_multipart::form::{ tempfile::TempFile, MultipartForm, text::Text };
-use mongodb::bson::doc;
-use tokio_postgres::types::Type;
+use futures_util::StreamExt;
+use mongodb::bson::{ doc, DateTime };
 use serde::{ Serialize, Deserialize };
 use serde_json::{ json, Number, Value };
 use semver::VersionReq;
-use chrono::{ NaiveDateTime, Utc, Duration };
+use chrono::{ Utc, Duration };
+use regex::Regex;
 use hex;
 use sha2::{ Sha256, Digest };
 use jsonwebtoken::{ Header, EncodingKey, DecodingKey, Algorithm, Validation, errors::ErrorKind };
 use log::{ error, debug };
 use std::io::Read;
-use crate::{ config::config, constants::*, types::{ server::{ Context, RespErr }, hive::{ JsonRpcResp, DgpAtBlock } } };
+use crate::{
+  config::config,
+  constants::*,
+  types::{ cv::{ CVContract, CVContractCode, CVStatus }, hive::{ DgpAtBlock, JsonRpcResp }, server::{ Context, RespErr } },
+};
+
+const TIMESTAMP_FORMAT: &str = "%Y-%m-%dT%H:%M:%S%.6f";
 
 #[get("")]
 async fn hello() -> impl Responder {
@@ -168,25 +175,30 @@ async fn verify_new(
 ) -> Result<HttpResponse, RespErr> {
   let username = verify_auth_token(&req)?;
   let address = path.into_inner();
-  let contract = ctx.vsc_db.contracts.find_one(doc! { "id": &address }).await.map_err(|e| RespErr::DbErr { msg: e.to_string() })?;
+  let contract = ctx.db.contracts.find_one(doc! { "id": &address }).await.map_err(|e| RespErr::DbErr { msg: e.to_string() })?;
   if contract.is_none() {
     return Ok(HttpResponse::NotFound().json(json!({"error": "contract not found"})));
   }
   let contract = contract.unwrap();
-  let can_verify: String = ctx.db
-    .query(
-      "SELECT vsc_cv.can_verify_new($1,$2,$3);",
-      &[
-        (&address, Type::VARCHAR),
-        (&req_data.license, Type::VARCHAR),
-        (&req_data.lang, Type::VARCHAR),
-      ]
-    ).await
-    .map_err(|e| RespErr::DbErr { msg: e.to_string() })?
-    [0].get(0);
-  if can_verify.len() > 0 {
-    return Err(RespErr::BadRequest { msg: can_verify });
+
+  // license check
+  let valid_license = ctx.db.cv_licenses
+    .find_one(doc! { "name": &req_data.license }).await
+    .map_err(|e| RespErr::DbErr { msg: e.to_string() })?;
+  if valid_license.is_none() {
+    return Err(RespErr::BadRequest { msg: format!("License {} is not supported.", &req_data.license) });
   }
+
+  // existing contract verification status check
+  match ctx.db.cv_contracts.find_one(doc! { "_id": &address }).await.map_err(|e| RespErr::DbErr { msg: e.to_string() })? {
+    Some(cv) => {
+      if cv.status != "pending" && cv.status != "failed" && cv.status != "not match" {
+        return Err(RespErr::BadRequest { msg: String::from("Contract is already verified or being verified.") });
+      }
+    }
+    None => (),
+  }
+
   // check required dependencies
   match req_data.lang.as_str() {
     "assemblyscript" => {
@@ -225,23 +237,21 @@ async fn verify_new(
     }
   }
   // clear already uploaded source codes when the previous ones failed verification
-  ctx.db
-    .query("DELETE FROM vsc_cv.source_code WHERE contract_addr=$1;", &[(&address, Type::VARCHAR)]).await
-    .map_err(|e| RespErr::DbErr { msg: e.to_string() })?;
-  ctx.db
-    .query(
-      "SELECT vsc_cv.verify_new($1,$2,$3,$4,$5,$6,$7);",
-      &[
-        (&address, Type::VARCHAR),
-        (&contract.code, Type::VARCHAR),
-        (&username, Type::VARCHAR),
-        (&Utc::now().naive_utc(), Type::TIMESTAMP),
-        (&req_data.license, Type::VARCHAR),
-        (&req_data.lang, Type::VARCHAR),
-        (&req_data.dependencies, Type::JSONB),
-      ]
-    ).await
-    .map_err(|e| RespErr::DbErr { msg: e.to_string() })?;
+  ctx.db.cv_source_codes.delete_many(doc! { "addr": &address }).await.map_err(|e| RespErr::DbErr { msg: e.to_string() })?;
+  ctx.db.cv_contracts.delete_one(doc! { "_id": &address }).await.map_err(|e| RespErr::DbErr { msg: e.to_string() })?;
+  let new_cv = CVContract {
+    id: address.clone(),
+    bytecode_cid: contract.code.clone(),
+    username: Some(username.clone()),
+    request_ts: DateTime::from_chrono(Utc::now()),
+    verified_ts: None,
+    status: CVStatus::Pending.to_string(),
+    exports: None,
+    license: req_data.license.clone(),
+    lang: req_data.lang.clone(),
+    dependencies: Some(req_data.dependencies.clone()),
+  };
+  ctx.db.cv_contracts.insert_one(new_cv).await.map_err(|e| RespErr::DbErr { msg: e.to_string() })?;
   Ok(HttpResponse::Ok().json(json!({ "success": true })))
 }
 
@@ -276,29 +286,31 @@ async fn upload_file(
       });
     }
   }
-  let can_upload: String = ctx.db
-    .query(
-      "SELECT vsc_cv.can_upload_file($1,$2);",
-      &[
-        (&address, Type::VARCHAR),
-        (&form.filename.0, Type::VARCHAR),
-      ]
-    ).await
-    .map_err(|e| RespErr::DbErr { msg: e.to_string() })?
-    [0].get(0);
-  if can_upload.len() > 0 {
-    return Err(RespErr::BadRequest { msg: can_upload });
+  let fname_regex = Regex::new(r"^[A-Za-z0-9._-]+$").expect("Invalid regex pattern");
+  if form.filename.0.len() > 50 {
+    return Err(RespErr::BadRequest { msg: String::from("Filename length must be less than 50 characters") });
+  } else if !fname_regex.is_match(&form.filename.0) {
+    return Err(RespErr::BadRequest { msg: String::from("Invalid filename") });
   }
-  ctx.db
-    .query(
-      "INSERT INTO vsc_cv.source_code(contract_addr,fname,content) VALUES($1,$2,$3) ON CONFLICT(contract_addr,fname) DO UPDATE SET content=$3;",
-      &[
-        (&address, Type::VARCHAR),
-        (&form.filename.0, Type::VARCHAR),
-        (&contents, Type::VARCHAR),
-      ]
-    ).await
-    .map_err(|e| RespErr::DbErr { msg: e.to_string() })?;
+  match ctx.db.cv_contracts.find_one(doc! { "_id": &address }).await.map_err(|e| RespErr::DbErr { msg: e.to_string() })? {
+    Some(cv) => {
+      if cv.status != "pending" {
+        return Err(RespErr::BadRequest { msg: format!("Status needs to be pending, it is currently {}", cv.status) });
+      } else if cv.lang == "assemblyscript" && (&form.filename.0 == "pnpm-lock.yml" || &form.filename.0 == "pnpm-lock.yaml") {
+        return Err(RespErr::BadRequest { msg: String::from("pnpm-lock.yaml is a reserved filename for pnpm lock files.") });
+      }
+    }
+    None => {
+      return Err(RespErr::BadRequest { msg: String::from("Begin contract verification with /verify/new first.") });
+    }
+  }
+  let new_file = CVContractCode {
+    addr: address.clone(),
+    fname: form.filename.0.clone(),
+    is_lockfile: false,
+    content: contents.clone(),
+  };
+  ctx.db.cv_source_codes.insert_one(new_file).await.map_err(|e| RespErr::DbErr { msg: e.to_string() })?;
   Ok(HttpResponse::Ok().json(json!({ "success": true })))
 }
 
@@ -306,90 +318,77 @@ async fn upload_file(
 async fn upload_complete(path: web::Path<String>, req: HttpRequest, ctx: web::Data<Context>) -> Result<HttpResponse, RespErr> {
   verify_auth_token(&req)?;
   let address = path.into_inner();
-  let contr = ctx.db
-    .query("SELECT hive_username, status FROM vsc_cv.contracts WHERE contract_addr=$1;", &[(&address, Type::VARCHAR)]).await
+  match ctx.db.cv_contracts.find_one(doc! { "_id": &address }).await.map_err(|e| RespErr::DbErr { msg: e.to_string() })? {
+    Some(cv) => {
+      if cv.status != "pending" {
+        return Err(RespErr::BadRequest { msg: String::from("Status is currently not pending upload") });
+      }
+    }
+    None => {
+      return Err(RespErr::BadRequest { msg: String::from("Contract does not exist") });
+    }
+  }
+  let file_count = ctx.db.cv_source_codes
+    .count_documents(doc! { "addr": &address }).await
     .map_err(|e| RespErr::DbErr { msg: e.to_string() })?;
-  if contr.len() < 1 {
-    return Err(RespErr::BadRequest { msg: String::from("Contract does not exist") });
-  }
-  let status: i16 = contr[0].get(1);
-  if status != 0 {
-    return Err(RespErr::BadRequest { msg: String::from("Status is currently not pending upload") });
-  }
-  let file_count: i64 = ctx.db
-    .query("SELECT COUNT(*) FROM vsc_cv.source_code WHERE contract_addr=$1;", &[(&address, Type::VARCHAR)]).await
-    .map_err(|e| RespErr::DbErr { msg: e.to_string() })?
-    [0].get(0);
   if file_count < 1 {
     return Err(RespErr::BadRequest { msg: String::from("No source files were uploaded for this contract") });
   }
-  ctx.db
-    .query("UPDATE vsc_cv.contracts SET status=1::SMALLINT WHERE contract_addr=$1;", &[(&address, Type::VARCHAR)]).await
+  ctx.db.cv_contracts
+    .update_one(doc! { "_id": &address }, doc! { "$set": doc! {"status": CVStatus::Queued.to_string()} }).await
     .map_err(|e| RespErr::DbErr { msg: e.to_string() })?;
   ctx.compiler.notify();
-  debug!("Complete");
   Ok(HttpResponse::Ok().json(json!({ "success": true })))
 }
 
 #[get("/languages")]
-async fn list_langs(ctx: web::Data<Context>) -> Result<HttpResponse, RespErr> {
-  let rows = ctx.db
-    .query("SELECT jsonb_agg(name) FROM vsc_cv.languages;", &[]).await
-    .map_err(|e| RespErr::DbErr { msg: e.to_string() })?;
-  let result: Value = rows[0].get(0);
-  Ok(HttpResponse::Ok().json(result))
+async fn list_langs() -> Result<HttpResponse, RespErr> {
+  Ok(HttpResponse::Ok().json(vec!["assemblyscript", "golang"]))
 }
 
 #[get("/licenses")]
 async fn list_licenses(ctx: web::Data<Context>) -> Result<HttpResponse, RespErr> {
-  let rows = ctx.db
-    .query("SELECT jsonb_agg(name) FROM vsc_cv.licenses;", &[]).await
-    .map_err(|e| RespErr::DbErr { msg: e.to_string() })?;
-  let result: Value = rows[0].get(0);
-  Ok(HttpResponse::Ok().json(result))
+  let result = ctx.db.cv_licenses.distinct("name", doc! {}).await.map_err(|e| RespErr::DbErr { msg: e.to_string() })?;
+  let result_arr: Vec<&str> = result
+    .iter()
+    .filter_map(|bson| bson.as_str())
+    .collect();
+  Ok(HttpResponse::Ok().json(result_arr))
 }
 
 #[get("/contract/{address}")]
 async fn contract_info(path: web::Path<String>, ctx: web::Data<Context>) -> Result<HttpResponse, RespErr> {
   let addr = path.into_inner();
-  let contract = ctx.db
-    .query(
-      "SELECT c.bytecode_cid, c.hive_username, c.request_ts, c.verified_ts, s.name, c.exports, lc.name, lg.name, c.dependencies FROM vsc_cv.contracts c JOIN vsc_cv.status s ON s.id = c.status JOIN vsc_cv.licenses lc ON lc.id = c.license JOIN vsc_cv.languages lg ON lg.id = c.lang WHERE contract_addr=$1;",
-      &[(&addr, Type::VARCHAR)]
-    ).await
-    .map_err(|e| RespErr::DbErr { msg: e.to_string() })?;
-  if contract.len() == 0 {
+  let contract = ctx.db.cv_contracts.find_one(doc! { "_id": &addr }).await.map_err(|e| RespErr::DbErr { msg: e.to_string() })?;
+  if contract.is_none() {
     return Ok(HttpResponse::NotFound().json(json!({"error": "contract not found"})));
   }
-  let files = ctx.db
-    .query(
-      "SELECT COALESCE(jsonb_agg(fname), '[]'::jsonb) FROM vsc_cv.source_code WHERE contract_addr=$1 AND is_lockfile=false;",
-      &[(&addr, Type::VARCHAR)]
-    ).await
+  let contract = contract.unwrap();
+  let files = ctx.db.cv_source_codes
+    .distinct("fname", doc! { "addr": &addr, "is_lockfile": false }).await
     .map_err(|e| RespErr::DbErr { msg: e.to_string() })?;
-  let lockfilename = ctx.db
-    .query(
-      "SELECT fname FROM vsc_cv.source_code WHERE contract_addr=$1 AND is_lockfile=true LIMIT 1;", // assume only one lockfile per contract
-      &[(&addr, Type::VARCHAR)]
-    ).await
-    .map_err(|e| RespErr::DbErr { msg: e.to_string() })?;
+  let files_arr: Vec<&str> = files
+    .iter()
+    .filter_map(|bson| bson.as_str())
+    .collect();
+  let lockfilename = ctx.db.cv_source_codes
+    .find_one(doc! { "addr": &addr, "is_lockfile": true }).await
+    .map_err(|e| RespErr::DbErr { msg: e.to_string() })?
+    .map(|f| f.fname);
   let result =
     json!({
     "address": &addr,
-    "code": contract[0].get::<usize, &str>(0),
-    "username": contract[0].get::<usize, &str>(1),
-    "request_ts": &contract[0].get::<usize, NaiveDateTime>(2).format("%Y-%m-%dT%H:%M:%S%.6f").to_string(),
-    "verified_ts": &contract[0].get::<usize, Option<NaiveDateTime>>(3).map(|t| t.format("%Y-%m-%dT%H:%M:%S%.6f").to_string()),
-    "status": contract[0].get::<usize, &str>(4),
-    "exports": contract[0].get::<usize, Option<Value>>(5),
-    "files": files[0].get::<usize, Value>(0),
-    "lockfile": match lockfilename.len() {
-      0 => None,
-      _ => Some(lockfilename[0].get::<usize, &str>(0)),
-    },
-    "license": contract[0].get::<usize, &str>(6),
-    "lang": contract[0].get::<usize, &str>(7),
-    "dependencies": contract[0].get::<usize, Value>(8)
+    "code": contract.bytecode_cid.clone(),
+    "username": contract.username.clone(),
+    "request_ts": contract.request_ts.to_chrono().format(TIMESTAMP_FORMAT).to_string(),
+    "verified_ts": contract.verified_ts.map(|t| t.to_chrono().format(TIMESTAMP_FORMAT).to_string()),
+    "status": contract.status.clone(),
+    "exports": contract.exports,
+    "files": files_arr.clone(),
+    "lockfile": lockfilename,
+    "license": contract.license.clone(),
+    "lang": contract.lang.clone(),
+    "dependencies": contract.dependencies.clone()
   });
   Ok(HttpResponse::Ok().json(result))
 }
@@ -397,59 +396,39 @@ async fn contract_info(path: web::Path<String>, ctx: web::Data<Context>) -> Resu
 #[get("/contract/{address}/files/ls")]
 async fn contract_files_ls(path: web::Path<String>, ctx: web::Data<Context>) -> Result<HttpResponse, RespErr> {
   let addr = path.into_inner();
-  let files = ctx.db
-    .query(
-      "SELECT jsonb_agg(fname) FROM vsc_cv.source_code WHERE contract_addr=$1 AND is_lockfile=false;",
-      &[(&addr, Type::VARCHAR)]
-    ).await
+  let files = ctx.db.cv_source_codes
+    .distinct("fname", doc! { "addr": &addr, "is_lockfile": false }).await
     .map_err(|e| RespErr::DbErr { msg: e.to_string() })?;
-  Ok(HttpResponse::Ok().json(files[0].get::<usize, Value>(0)))
+  let files_arr: Vec<&str> = files
+    .iter()
+    .filter_map(|bson| bson.as_str())
+    .collect();
+  Ok(HttpResponse::Ok().json(files_arr))
 }
 
 #[get("/contract/{address}/files/cat/{filename}")]
 async fn contract_files_cat(path: web::Path<(String, String)>, ctx: web::Data<Context>) -> Result<HttpResponse, RespErr> {
   let (addr, filename) = path.into_inner();
-  let files = ctx.db
-    .query(
-      "SELECT content FROM vsc_cv.source_code WHERE contract_addr=$1 AND fname=$2;",
-      &[
-        (&addr, Type::VARCHAR),
-        (&filename, Type::VARCHAR),
-      ]
-    ).await
-    .map_err(|e| RespErr::DbErr { msg: e.to_string() })?;
-  if files.len() == 0 {
-    return Ok(HttpResponse::NotFound().body("Error 404 file not found"));
+  match
+    ctx.db.cv_source_codes
+      .find_one(doc! { "addr": &addr, "fname": &filename }).await
+      .map_err(|e| RespErr::DbErr { msg: e.to_string() })?
+  {
+    Some(file) => Ok(HttpResponse::Ok().body(file.content)),
+    None => Ok(HttpResponse::NotFound().body("Error 404 file not found")),
   }
-  Ok(HttpResponse::Ok().body(files[0].get::<usize, String>(0)))
 }
 
 #[get("/contract/{address}/files/catall")]
 async fn contract_files_cat_all(path: web::Path<String>, ctx: web::Data<Context>) -> Result<HttpResponse, RespErr> {
   let addr = path.into_inner();
-  let files = ctx.db
-    .query(
-      "SELECT jsonb_agg(jsonb_build_object('name',fname,'content',content)) FROM vsc_cv.source_code WHERE contract_addr=$1 AND is_lockfile=false;",
-      &[(&addr, Type::VARCHAR)]
-    ).await
+  let mut files_cursor = ctx.db.cv_source_codes
+    .find(doc! { "addr": &addr }).await
     .map_err(|e| RespErr::DbErr { msg: e.to_string() })?;
-  if files.len() == 0 {
-    return Ok(HttpResponse::NotFound().body("Error 404 file not found"));
+  let mut results = Vec::new();
+  while let Some(f) = files_cursor.next().await {
+    let file = f.map_err(|_| RespErr::InternalErr { msg: String::from("Failed to parse file") })?;
+    results.push(json!({"name": file.fname, "content": file.content}));
   }
-  Ok(HttpResponse::Ok().json(files[0].get::<usize, Value>(0)))
-}
-
-#[get("/bytecode/{cid}/lookupaddr")]
-async fn bytecode_lookup_addr(path: web::Path<String>, ctx: web::Data<Context>) -> Result<HttpResponse, RespErr> {
-  let cid = path.into_inner();
-  let addr = ctx.db
-    .query(
-      "SELECT contract_addr FROM vsc_cv.contracts WHERE bytecode_cid=$1 AND status=3::SMALLINT LIMIT 1;",
-      &[(&cid, Type::VARCHAR)]
-    ).await
-    .map_err(|e| RespErr::DbErr { msg: e.to_string() })?;
-  if addr.len() == 0 {
-    return Ok(HttpResponse::NotFound().json(json!({"error": "no matching contracts found"})));
-  }
-  Ok(HttpResponse::Ok().json(json!({"address": addr[0].get::<usize, &str>(0)})))
+  Ok(HttpResponse::Ok().json(results))
 }

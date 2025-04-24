@@ -26,23 +26,23 @@ async fn props(ctx: web::Data<Context>) -> Result<HttpResponse, RespErr> {
       }
     }, doc! { "$count": "total" }];
 
-  let mut wit_cursor = ctx.vsc_db.witnesses.aggregate(pipeline).await.map_err(|e| RespErr::DbErr { msg: e.to_string() })?;
+  let mut wit_cursor = ctx.db.witnesses.aggregate(pipeline).await.map_err(|e| RespErr::DbErr { msg: e.to_string() })?;
   let witness_count = wit_cursor
     .next().await
     .transpose()
     .map_err(|e| RespErr::DbErr { msg: e.to_string() })?
     .map(|d| d.get_i32("total").unwrap_or(0))
     .unwrap_or(0);
-  let contracts = ctx.vsc_db.contracts.estimated_document_count().await.map_err(|e| RespErr::DbErr { msg: e.to_string() })?;
-  let epoch = ctx.vsc_db.elections.estimated_document_count().await.map_err(|e| RespErr::DbErr { msg: e.to_string() })?;
-  let block_count = ctx.vsc_db.blocks.estimated_document_count().await.map_err(|e| RespErr::DbErr { msg: e.to_string() })?;
+  let contracts = ctx.db.contracts.estimated_document_count().await.map_err(|e| RespErr::DbErr { msg: e.to_string() })?;
+  let epoch = ctx.db.elections.estimated_document_count().await.map_err(|e| RespErr::DbErr { msg: e.to_string() })?;
+  let block_count = ctx.db.blocks.estimated_document_count().await.map_err(|e| RespErr::DbErr { msg: e.to_string() })?;
   let last_l1_block = match
-    ctx.vsc_db.l1_blocks.find_one(doc! { "type": "metadata" }).await.map_err(|e| RespErr::DbErr { msg: e.to_string() })?
+    ctx.db.l1_blocks.find_one(doc! { "type": "metadata" }).await.map_err(|e| RespErr::DbErr { msg: e.to_string() })?
   {
     Some(state) => state.head_height,
     None => 0,
   };
-  let tx_count = ctx.vsc_db.tx_pool.estimated_document_count().await.map_err(|e| RespErr::DbErr { msg: e.to_string() })?;
+  let tx_count = ctx.db.tx_pool.estimated_document_count().await.map_err(|e| RespErr::DbErr { msg: e.to_string() })?;
   Ok(
     HttpResponse::Ok().json(
       json!({
@@ -76,7 +76,7 @@ async fn list_witnesses(ctx: web::Data<Context>) -> Result<HttpResponse, RespErr
     }
   ];
 
-  let mut cursor = ctx.vsc_db.witnesses.aggregate(pipeline).await.map_err(|e| RespErr::DbErr { msg: e.to_string() })?;
+  let mut cursor = ctx.db.witnesses.aggregate(pipeline).await.map_err(|e| RespErr::DbErr { msg: e.to_string() })?;
   let mut results = Vec::new();
   while let Some(doc) = cursor.next().await {
     results.push(doc.map_err(|e| RespErr::DbErr { msg: e.to_string() })?);
@@ -91,7 +91,7 @@ async fn get_witness(path: web::Path<String>, ctx: web::Data<Context>) -> Result
     .sort(doc! { "height": -1 })
     .build();
   match
-    ctx.vsc_db.witnesses
+    ctx.db.witnesses
       .find_one(doc! { "account": &user })
       .with_options(opt).await
       .map_err(|e| RespErr::DbErr { msg: e.to_string() })?
@@ -104,7 +104,7 @@ async fn get_witness(path: web::Path<String>, ctx: web::Data<Context>) -> Result
 #[get("/witness/{username}/stats")]
 async fn get_witness_stats(path: web::Path<String>, ctx: web::Data<Context>) -> Result<HttpResponse, RespErr> {
   let user = path.into_inner();
-  let stats = ctx.vsc_db.witness_stats
+  let stats = ctx.db.witness_stats
     .find_one(doc! { "_id": &user }).await
     .map_err(|e| RespErr::DbErr { msg: e.to_string() })?
     .unwrap_or(WitnessStat {
@@ -123,7 +123,7 @@ async fn get_balance(path: web::Path<String>, ctx: web::Data<Context>) -> Result
   let opt = FindOneOptions::builder()
     .sort(doc! { "block_height": -1 })
     .build();
-  let mut bal = ctx.vsc_db.balances
+  let mut bal = ctx.db.balances
     .find_one(doc! { "account": user.clone() })
     .with_options(opt.clone()).await
     .map_err(|e| RespErr::DbErr { msg: e.to_string() })?
@@ -140,7 +140,7 @@ async fn get_balance(path: web::Path<String>, ctx: web::Data<Context>) -> Result
       rc_used: None,
     });
   bal.rc_used = Some(
-    ctx.vsc_db.rc
+    ctx.db.rc
       .find_one(doc! { "account": user.clone() })
       .with_options(opt.clone()).await
       .map_err(|e| RespErr::DbErr { msg: e.to_string() })?
@@ -164,7 +164,7 @@ async fn get_balance(path: web::Path<String>, ctx: web::Data<Context>) -> Result
       }
     }
   ];
-  let mut unstaking_cursor = ctx.vsc_db.ledger_actions
+  let mut unstaking_cursor = ctx.db.ledger_actions
     .aggregate(unstaking_pipeline).await
     .map_err(|e| RespErr::DbErr { msg: e.to_string() })?;
   bal.hive_unstaking = Some(
@@ -200,7 +200,7 @@ async fn list_epochs(params: web::Query<ListEpochOpts>, ctx: web::Data<Context>)
   if proposer.is_some() {
     filter.insert("proposer", &proposer.unwrap());
   }
-  let mut epochs_cursor = ctx.vsc_db.elections
+  let mut epochs_cursor = ctx.db.elections
     .find(filter)
     .with_options(opt)
     .limit(count).await
@@ -218,9 +218,7 @@ async fn get_epoch(path: web::Path<String>, ctx: web::Data<Context>) -> Result<H
     .into_inner()
     .parse::<i32>()
     .map_err(|_| RespErr::BadRequest { msg: String::from("Invalid epoch number") })?;
-  let epoch = ctx.vsc_db.elections
-    .find_one(doc! { "epoch": epoch_num }).await
-    .map_err(|e| RespErr::DbErr { msg: e.to_string() })?;
+  let epoch = ctx.db.elections.find_one(doc! { "epoch": epoch_num }).await.map_err(|e| RespErr::DbErr { msg: e.to_string() })?;
   match epoch {
     Some(ep) => Ok(HttpResponse::Ok().json(ep)),
     None => Ok(HttpResponse::NotFound().json(json!({"error": "Epoch does not exist"}))),
@@ -254,7 +252,7 @@ async fn list_blocks(params: web::Query<ListBlockOpts>, ctx: web::Data<Context>)
   if epoch.is_some() {
     filter.insert("be_info.epoch", epoch.unwrap());
   }
-  let mut blocks_cursor = ctx.vsc_db.blocks
+  let mut blocks_cursor = ctx.db.blocks
     .find(filter)
     .with_options(opt)
     .limit(count).await
@@ -279,7 +277,7 @@ async fn get_block(path: web::Path<(String, String)>, ctx: web::Data<Context>) -
       return Err(RespErr::BadRequest { msg: String::from("Invalid by clause") });
     }
   };
-  let epoch = ctx.vsc_db.blocks.find_one(filter).await.map_err(|e| RespErr::DbErr { msg: e.to_string() })?;
+  let epoch = ctx.db.blocks.find_one(filter).await.map_err(|e| RespErr::DbErr { msg: e.to_string() })?;
   match epoch {
     Some(block) => { Ok(HttpResponse::Ok().json(block)) }
     None => Ok(HttpResponse::NotFound().json(json!({"error": "Block not found"}))),
@@ -305,9 +303,7 @@ async fn get_tx_output(path: web::Path<String>, ctx: web::Data<Context>) -> Resu
       if o.r#type == "custom_json_operation" {
         let op = serde_json::from_value::<CustomJson>(o.value).unwrap();
         if &op.id == "vsc.produce_block" {
-          let block = ctx.vsc_db.blocks
-            .find_one(doc! { "id": &trx_id }).await
-            .map_err(|e| RespErr::DbErr { msg: e.to_string() })?;
+          let block = ctx.db.blocks.find_one(doc! { "id": &trx_id }).await.map_err(|e| RespErr::DbErr { msg: e.to_string() })?;
           result.push(Some(serde_json::to_value(block).unwrap()));
         } else if
           &op.id == "vsc.call" ||
@@ -318,17 +314,17 @@ async fn get_tx_output(path: web::Path<String>, ctx: web::Data<Context>) -> Resu
           &op.id == "vsc.stake_hbd" ||
           &op.id == "vsc.unstake_hbd"
         {
-          let tx_out = ctx.vsc_db.tx_pool
+          let tx_out = ctx.db.tx_pool
             .find_one(doc! { "id": &vsc_txid }).await
             .map_err(|e| RespErr::DbErr { msg: e.to_string() })?;
           result.push(Some(serde_json::to_value(tx_out).unwrap()));
         } else if &op.id == "vsc.create_contract" {
-          let contract = ctx.vsc_db.contracts
+          let contract = ctx.db.contracts
             .find_one(doc! { "tx_id": &trx_id }).await
             .map_err(|e| RespErr::DbErr { msg: e.to_string() })?;
           result.push(Some(serde_json::to_value(contract).unwrap()));
         } else if &op.id == "vsc.election_result" {
-          let election = ctx.vsc_db.elections
+          let election = ctx.db.elections
             .find_one(doc! { "tx_id": &trx_id }).await
             .map_err(|e| RespErr::DbErr { msg: e.to_string() })?;
           result.push(Some(serde_json::to_value(election).unwrap()));
@@ -356,7 +352,7 @@ async fn list_contracts(params: web::Query<ListContractsOpts>, ctx: web::Data<Co
   let opt = FindOptions::builder()
     .sort(doc! { "creation_height": -1 })
     .build();
-  let mut contracts_cursor = ctx.vsc_db.contracts
+  let mut contracts_cursor = ctx.db.contracts
     .find(doc! {})
     .with_options(opt)
     .limit(count).await
@@ -371,7 +367,7 @@ async fn list_contracts(params: web::Query<ListContractsOpts>, ctx: web::Data<Co
 #[get("/contract/{id}")]
 async fn get_contract(path: web::Path<String>, ctx: web::Data<Context>) -> Result<HttpResponse, RespErr> {
   let id = path.into_inner();
-  let contract = ctx.vsc_db.contracts.find_one(doc! { "id": &id }).await.map_err(|e| RespErr::DbErr { msg: e.to_string() })?;
+  let contract = ctx.db.contracts.find_one(doc! { "id": &id }).await.map_err(|e| RespErr::DbErr { msg: e.to_string() })?;
   match contract {
     Some(c) => { Ok(HttpResponse::Ok().json(c)) }
     None => Ok(HttpResponse::NotFound().json(json!({"error": "Contract does not exist"}))),
@@ -380,7 +376,7 @@ async fn get_contract(path: web::Path<String>, ctx: web::Data<Context>) -> Resul
 
 #[get("/bridge/stats")]
 async fn bridge_stats(ctx: web::Data<Context>) -> Result<HttpResponse, RespErr> {
-  let stats = ctx.vsc_db.bridge_stats.find_one(doc! { "_id": 0 }).await.map_err(|e| RespErr::DbErr { msg: e.to_string() })?;
+  let stats = ctx.db.bridge_stats.find_one(doc! { "_id": 0 }).await.map_err(|e| RespErr::DbErr { msg: e.to_string() })?;
   match stats {
     Some(s) => Ok(HttpResponse::Ok().json(s)),
     None => Ok(HttpResponse::Ok().json(BridgeStats { deposits: 0, withdrawals: 0 })),
@@ -390,19 +386,19 @@ async fn bridge_stats(ctx: web::Data<Context>) -> Result<HttpResponse, RespErr> 
 #[get("/search/{query}")]
 async fn search(path: web::Path<String>, ctx: web::Data<Context>) -> Result<HttpResponse, RespErr> {
   let query = path.into_inner();
-  let block = ctx.vsc_db.blocks.find_one(doc! { "block": &query }).await.map_err(|e| RespErr::DbErr { msg: e.to_string() })?;
+  let block = ctx.db.blocks.find_one(doc! { "block": &query }).await.map_err(|e| RespErr::DbErr { msg: e.to_string() })?;
   if block.is_some() {
     return Ok(HttpResponse::Ok().json(json!({"type": "block", "result": &query})));
   }
-  let election = ctx.vsc_db.elections.find_one(doc! { "data": &query }).await.map_err(|e| RespErr::DbErr { msg: e.to_string() })?;
+  let election = ctx.db.elections.find_one(doc! { "data": &query }).await.map_err(|e| RespErr::DbErr { msg: e.to_string() })?;
   if election.is_some() {
     return Ok(HttpResponse::Ok().json(json!({"type": "election", "result": election.unwrap().epoch})));
   }
-  let contract = ctx.vsc_db.contracts.find_one(doc! { "id": &query }).await.map_err(|e| RespErr::DbErr { msg: e.to_string() })?;
+  let contract = ctx.db.contracts.find_one(doc! { "id": &query }).await.map_err(|e| RespErr::DbErr { msg: e.to_string() })?;
   if contract.is_some() {
     return Ok(HttpResponse::Ok().json(json!({"type": "contract", "result": &query})));
   }
-  let tx = ctx.vsc_db.tx_pool.find_one(doc! { "id": &query }).await.map_err(|e| RespErr::DbErr { msg: e.to_string() })?;
+  let tx = ctx.db.tx_pool.find_one(doc! { "id": &query }).await.map_err(|e| RespErr::DbErr { msg: e.to_string() })?;
   if tx.is_some() {
     return Ok(HttpResponse::Ok().json(json!({"type": "tx", "result": &query})));
   }

@@ -2,13 +2,7 @@ use serde::Deserialize;
 use serde_json::{ self, json, Value };
 use actix_web::{ middleware::NormalizePath, test, web, App };
 use std::env;
-use vsc_blocks_backend::{
-  compiler::Compiler,
-  db::DbPool,
-  endpoints::cv_api,
-  mongo::MongoDB,
-  types::{ server::Context, vsc::Contract },
-};
+use vsc_blocks_backend::{ compiler::Compiler, endpoints::cv_api, mongo::MongoDB, types::{ server::Context, vsc::Contract } };
 
 #[derive(Clone, Deserialize)]
 struct SuccessResp {
@@ -33,35 +27,32 @@ struct CVResp {
   pub dependencies: Option<Value>,
 }
 
-async fn setup_db() -> (DbPool, MongoDB) {
-  // vsc cv db
-  let db_pool = DbPool::init(String::from("postgres://postgres:mysecretpassword@127.0.0.1:5432/postgres")).expect(
-    "failed to init postgres db pool"
-  );
-  db_pool.execute_file("DROP SCHEMA IF EXISTS vsc_cv CASCADE;").await.expect("failed to drop vsc_cv schema");
-  db_pool.setup().await.expect("failed to setup postgres db pool");
-
-  // vsc db
-  let vsc_db = MongoDB::init(String::from("mongodb://127.0.0.1:27017")).await.expect("failed to setup mongodb database");
-  vsc_db.contracts.drop().await.expect("failed to drop contracts collection");
+async fn setup_db() -> MongoDB {
+  // connect and drop existing db
+  let db = MongoDB::init(String::from("mongodb://127.0.0.1:27017")).await.expect("failed to setup mongodb database");
+  db.contracts.drop().await.expect("failed to drop contracts collection");
+  db.cv_contracts.drop().await.expect("failed to drop cv contracts collection");
+  db.cv_licenses.drop().await.expect("failed to drop cv licenses collection");
+  db.cv_source_codes.drop().await.expect("failed to drop cv source_codes collection");
+  db.setup().await.expect("Failed to setup cv database");
 
   // insert example contract
   let contract_data: Contract = serde_json::from_str(include_str!("contract.json")).expect("Failed to parse contract.json");
-  vsc_db.contracts.insert_one(contract_data).await.expect("Failed to insert contract");
-  return (db_pool, vsc_db);
+  db.contracts.insert_one(contract_data).await.expect("Failed to insert contract");
+  return db;
 }
 
 #[actix_web::test]
 async fn test_e2e_verify_contract_assemblyscript() {
   let contract_id = "vs41q9c3yg82k4q76nprqk89xzk2n8zhvedrz5prnrrqpy6v9css3seg2q43uvjdc500";
-  let dbs = setup_db().await;
+  let db = setup_db().await;
   let http_client = reqwest::Client::new();
   let asc_dir = env
     ::var("VSC_CV_TEST_ASC_DIR")
     .unwrap_or_else(|_| String::from("/Users/techcoderx/vsc-blocks-backend/as_compiler"));
-  let compiler = Compiler::init(&dbs.0, String::from("as-compiler"), asc_dir);
+  let compiler = Compiler::init(&db, String::from("as-compiler"), asc_dir);
   compiler.notify();
-  let server_ctx = Context { db: dbs.0, vsc_db: dbs.1, compiler: compiler.clone(), http_client: http_client.clone() };
+  let server_ctx = Context { db: db, compiler: compiler.clone(), http_client: http_client.clone() };
   let app = test::init_service(
     App::new()
       .wrap(NormalizePath::trim())
@@ -80,7 +71,6 @@ async fn test_e2e_verify_contract_assemblyscript() {
           .service(cv_api::contract_files_ls)
           .service(cv_api::contract_files_cat)
           .service(cv_api::contract_files_cat_all)
-          .service(cv_api::bytecode_lookup_addr)
       )
   ).await;
   let req_verify_new = test::TestRequest
@@ -142,7 +132,9 @@ async fn test_e2e_verify_contract_assemblyscript() {
   let req_get_contract = test::TestRequest::get().uri(format!("/cv-api/v1/contract/{}", contract_id).as_str()).to_request();
   let resp: CVResp = test::call_and_read_body_json(&app, req_get_contract).await;
   assert_eq!(resp.error, None);
-  assert_eq!(resp.files.unwrap().len(), 1);
+  let filenames = resp.files.unwrap();
+  assert_eq!(filenames.len(), 1);
+  assert_eq!(filenames.get(0).unwrap(), "index.ts");
 
   // Call complete endpoint
   let req_complete = test::TestRequest::post().uri(format!("/cv-api/v1/verify/{}/complete", contract_id).as_str()).to_request();

@@ -4,7 +4,7 @@ use serde_json::json;
 use reqwest;
 use log::error;
 use std::fmt;
-use crate::{ db::DbPool, mongo::MongoDB };
+use crate::mongo::MongoDB;
 use crate::compiler::Compiler;
 
 #[derive(Display, Error)]
@@ -69,8 +69,7 @@ impl actix_web::error::ResponseError for RespErr {
 
 #[derive(Clone)]
 pub struct Context {
-  pub db: DbPool,
-  pub vsc_db: MongoDB,
+  pub db: MongoDB,
   pub compiler: Compiler,
   pub http_client: reqwest::Client,
 }
