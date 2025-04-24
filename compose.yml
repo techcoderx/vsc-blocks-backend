@@ -34,6 +34,13 @@ services:
       timeout: 5s
       retries: 5
 
+  mongo:
+    image: mongo:8.0.4
+    ports:
+      - 27017:27017
+    volumes:
+      - mongod:/data/db
+
   cloudflared:
     image: cloudflare/cloudflared:latest
     profiles:
@@ -47,3 +54,4 @@ services:
 
 volumes:
   postgresd:
+  mongod:
