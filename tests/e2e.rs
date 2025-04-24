@@ -149,7 +149,6 @@ async fn test_e2e_verify_contract_assemblyscript() {
   let resp: SuccessResp = test::call_and_read_body_json(&app, req_complete).await;
   assert_eq!(resp.error, None);
   assert_eq!(resp.success.unwrap(), true);
-  compiler.notify();
 
   // Poll contract status until success
   use std::collections::HashSet;
