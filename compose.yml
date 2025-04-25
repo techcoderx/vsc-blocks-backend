@@ -13,9 +13,8 @@ services:
       interval: 20s
       timeout: 3s
       retries: 5
-
     depends_on:
-      postgres:
+      mongo:
         condition: service_healthy
 
   mongo:
@@ -24,6 +23,12 @@ services:
       - ${DB_PORT:-27017}:27017
     volumes:
       - mongod:/data/db
+      - mongoconfig:/data/configdb
+    healthcheck:
+      test: echo 'db.runCommand("ping").ok' | mongosh --quiet
+      interval: 10s
+      retries: 5
+      timeout: 5s
 
   cloudflared:
     image: cloudflare/cloudflared:latest
@@ -37,5 +42,5 @@ services:
         max-file: '3'
 
 volumes:
-  postgresd:
   mongod:
+  mongoconfig:

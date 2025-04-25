@@ -1,4 +1,5 @@
-use mongodb::{ options::ClientOptions, Client, Collection };
+use bson::doc;
+use mongodb::{ options::{ ClientOptions, IndexOptions }, Client, Collection, IndexModel };
 use std::error::Error;
 use log::info;
 use crate::types::{
@@ -74,6 +75,10 @@ impl MongoDB {
   }
 
   pub async fn setup(&self) -> Result<(), Box<dyn Error>> {
+    let already_setup = self.cv_licenses.find_one(doc! {}).await?;
+    if already_setup.is_some() {
+      return Ok(());
+    }
     let licenses = vec![
       "MIT",
       "Apache-2.0",
@@ -97,6 +102,25 @@ impl MongoDB {
       })
       .collect();
     self.cv_licenses.insert_many(licenses).await?;
+
+    // Create compound unique index for source_code collection
+    let source_codes_index = IndexModel::builder()
+      .keys(bson::doc! { "addr": 1, "fname": 1 })
+      .options(IndexOptions::builder().unique(true).build())
+      .build();
+    self.cv_source_codes.create_index(source_codes_index).await?;
+
+    // Create indexes for contracts collection
+    let status_index = IndexModel::builder()
+      .keys(bson::doc! { "status": 1 })
+      .build();
+    self.cv_contracts.create_index(status_index).await?;
+
+    let status_ts_index = IndexModel::builder()
+      .keys(bson::doc! { "status": 1, "request_ts": 1 })
+      .build();
+    self.cv_contracts.create_index(status_ts_index).await?;
+
     Ok(())
   }
 }
