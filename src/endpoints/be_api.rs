@@ -9,7 +9,7 @@ use crate::{
   types::{
     hive::{ CustomJson, TxByHash },
     server::{ Context, RespErr },
-    vsc::{ to_vsc_txid, BridgeStats, LedgerBalance, RcUsedAtHeight, WitnessStat },
+    vsc::{ BridgeStats, LedgerBalance, RcUsedAtHeight, WitnessStat },
   },
 };
 
@@ -299,7 +299,6 @@ async fn get_tx_output(path: web::Path<String>, ctx: web::Data<Context>) -> Resu
     let mut result: Vec<Option<Value>> = Vec::new();
     for i in 0..tx.transaction_json.operations.len() {
       let o = tx.transaction_json.operations[i].clone();
-      let vsc_txid = to_vsc_txid(&trx_id, i);
       if o.r#type == "custom_json_operation" {
         let op = serde_json::from_value::<CustomJson>(o.value).unwrap();
         if &op.id == "vsc.produce_block" {
@@ -315,7 +314,7 @@ async fn get_tx_output(path: web::Path<String>, ctx: web::Data<Context>) -> Resu
           &op.id == "vsc.unstake_hbd"
         {
           let tx_out = ctx.db.tx_pool
-            .find_one(doc! { "id": &vsc_txid }).await
+            .find_one(doc! { "id": &trx_id, "anchr_opidx": i as i64 }).await
             .map_err(|e| RespErr::DbErr { msg: e.to_string() })?;
           result.push(Some(serde_json::to_value(tx_out).unwrap()));
         } else if &op.id == "vsc.create_contract" {

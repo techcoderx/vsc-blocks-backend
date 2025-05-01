@@ -229,14 +229,6 @@ pub struct Output {
   pub index: i64,
 }
 
-pub fn to_vsc_txid(trx_id: &str, op_idx: usize) -> String {
-  if op_idx == 0 {
-    return String::from(trx_id);
-  } else {
-    return format!("{}-{}", trx_id, op_idx);
-  }
-}
-
 pub fn json_to_bson(option_json: Option<&Value>) -> bson::Bson {
   match option_json {
     Some(json_val) => bson::to_bson(json_val).expect("Failed to convert JSON to BSON"),
