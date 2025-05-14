@@ -9,7 +9,7 @@ use crate::{
   types::{
     hive::{ CustomJson, TxByHash },
     server::{ Context, RespErr },
-    vsc::{ BridgeStats, LedgerBalance, RcUsedAtHeight, WitnessStat },
+    vsc::{ BridgeStats, LedgerBalance, RcUsedAtHeight, UserStats, WitnessStat },
   },
 };
 
@@ -380,6 +380,27 @@ async fn bridge_stats(ctx: web::Data<Context>) -> Result<HttpResponse, RespErr> 
     Some(s) => Ok(HttpResponse::Ok().json(s)),
     None => Ok(HttpResponse::Ok().json(BridgeStats { deposits: 0, withdrawals: 0 })),
   }
+}
+
+#[get("/address/{addr}/stats")]
+async fn addr_stats(path: web::Path<String>, ctx: web::Data<Context>) -> Result<HttpResponse, RespErr> {
+  let user = path.into_inner();
+  let txs = ctx.db.tx_pool
+    .count_documents(doc! { "$or": [{"required_auths": &user }, {"required_posting_auths": &user}, {"data.to": &user}] }).await
+    .map_err(|e| RespErr::DbErr { msg: e.to_string() })?;
+  let ledger_txs = ctx.db.ledger
+    .count_documents(doc! { "$or": [{"from": &user }, {"owner": &user}] }).await
+    .map_err(|e| RespErr::DbErr { msg: e.to_string() })?;
+  let ledger_actions = ctx.db.ledger_actions
+    .count_documents(doc! { "to": &user }).await
+    .map_err(|e| RespErr::DbErr { msg: e.to_string() })?;
+  let deposits = ctx.db.ledger
+    .count_documents(doc! { "$or": [{"from": &user }, {"owner": &user}], "t": "deposit" }).await
+    .map_err(|e| RespErr::DbErr { msg: e.to_string() })?;
+  let withdrawals = ctx.db.ledger_actions
+    .count_documents(doc! { "to": &user, "type": "withdraw" }).await
+    .map_err(|e| RespErr::DbErr { msg: e.to_string() })?;
+  Ok(HttpResponse::Ok().json(UserStats { txs, ledger_txs, ledger_actions, deposits, withdrawals }))
 }
 
 #[get("/search/{query}")]

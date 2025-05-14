@@ -229,6 +229,15 @@ pub struct Output {
   pub index: i64,
 }
 
+#[derive(Serialize)]
+pub struct UserStats {
+  pub txs: u64,
+  pub ledger_txs: u64,
+  pub ledger_actions: u64,
+  pub deposits: u64,
+  pub withdrawals: u64,
+}
+
 pub fn json_to_bson(option_json: Option<&Value>) -> bson::Bson {
   match option_json {
     Some(json_val) => bson::to_bson(json_val).expect("Failed to convert JSON to BSON"),
