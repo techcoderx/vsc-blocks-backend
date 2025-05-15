@@ -155,6 +155,7 @@ pub struct ElectionResultRecord {
   #[serde(rename = "type")]
   pub r#type: String,
   pub be_info: Option<ElectionExt>,
+  pub blocks_info: Option<EpochBlocksInfo>,
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
@@ -163,6 +164,12 @@ pub struct ElectionExt {
   pub signature: Option<Signature>,
   pub voted_weight: u64,
   pub eligible_weight: u64,
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct EpochBlocksInfo {
+  pub count: i32,
+  pub total_votes: u64,
 }
 
 #[derive(Serialize, Deserialize, Clone)]

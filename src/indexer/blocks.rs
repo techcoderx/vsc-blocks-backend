@@ -10,7 +10,7 @@ use crate::{
   config::config,
   types::{
     hive::{ CustomJson, TxByHash },
-    vsc::{ json_to_bson, BlockHeaderRecord, ElectionResultRecord, IndexerState, WitnessStat },
+    vsc::{ json_to_bson, BlockHeaderRecord, ElectionResultRecord, EpochBlocksInfo, IndexerState, WitnessStat },
   },
 };
 
@@ -132,6 +132,9 @@ impl BlockIndexer {
             break 'mainloop;
           }
           let bv = bv.unwrap();
+          let mut epoch_blocks_info = epoch.blocks_info.unwrap_or(EpochBlocksInfo { count: 0, total_votes: 0 });
+          epoch_blocks_info.count += 1;
+          epoch_blocks_info.total_votes += bv.voted_weight();
           let up = blocks_db
             .update_one(
               doc! { "block": block.block.clone() },
@@ -148,6 +151,15 @@ impl BlockIndexer {
               }
             )
             .upsert(true).await;
+          if up.is_err() {
+            error!("Failed to update {}", up.unwrap_err());
+            sleep(Duration::from_secs(120)).await;
+            continue 'mainloop;
+          }
+          let up = election_db.update_one(
+            doc! { "epoch": epoch.epoch },
+            doc! { "$set": doc! {"blocks_info": doc! {"count": epoch_blocks_info.count, "total_votes": epoch_blocks_info.total_votes as i64}} }
+          ).await;
           if up.is_err() {
             error!("Failed to update {}", up.unwrap_err());
             sleep(Duration::from_secs(120)).await;
