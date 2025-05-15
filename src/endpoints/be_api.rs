@@ -57,50 +57,6 @@ async fn props(ctx: web::Data<Context>) -> Result<HttpResponse, RespErr> {
   )
 }
 
-#[get("/witnesses")]
-async fn list_witnesses(ctx: web::Data<Context>) -> Result<HttpResponse, RespErr> {
-  let pipeline = vec![
-    doc! { "$sort": { "account": 1, "height": -1 } },
-    doc! { 
-      "$group": {
-        "_id": "$account",
-        "doc": { "$first": "$$ROOT" }
-      }
-    },
-    doc! { "$replaceRoot": { "newRoot": "$doc" } },
-    // New projection stage to exclude _id
-    doc! { 
-      "$project": {
-        "_id": 0
-      }
-    }
-  ];
-
-  let mut cursor = ctx.db.witnesses.aggregate(pipeline).await.map_err(|e| RespErr::DbErr { msg: e.to_string() })?;
-  let mut results = Vec::new();
-  while let Some(doc) = cursor.next().await {
-    results.push(doc.map_err(|e| RespErr::DbErr { msg: e.to_string() })?);
-  }
-  Ok(HttpResponse::Ok().json(results))
-}
-
-#[get("/witness/{username}")]
-async fn get_witness(path: web::Path<String>, ctx: web::Data<Context>) -> Result<HttpResponse, RespErr> {
-  let user = path.into_inner();
-  let opt = FindOneOptions::builder()
-    .sort(doc! { "height": -1 })
-    .build();
-  match
-    ctx.db.witnesses
-      .find_one(doc! { "account": &user })
-      .with_options(opt).await
-      .map_err(|e| RespErr::DbErr { msg: e.to_string() })?
-  {
-    Some(wit) => Ok(HttpResponse::Ok().json(wit)),
-    None => Ok(HttpResponse::NotFound().json(json!({"error": "witness does not exist"}))),
-  }
-}
-
 #[get("/witness/{username}/stats")]
 async fn get_witness_stats(path: web::Path<String>, ctx: web::Data<Context>) -> Result<HttpResponse, RespErr> {
   let user = path.into_inner();
@@ -114,6 +70,34 @@ async fn get_witness_stats(path: web::Path<String>, ctx: web::Data<Context>) -> 
       last_block: None,
       last_epoch: None,
     });
+  Ok(HttpResponse::Ok().json(stats))
+}
+
+#[get("/witness/{username}/stats/many")]
+async fn get_witness_stats_many(path: web::Path<String>, ctx: web::Data<Context>) -> Result<HttpResponse, RespErr> {
+  let p = path.into_inner();
+  if p.len() == 0 {
+    return Err(RespErr::BadRequest { msg: String::from("Invalid username") });
+  }
+  let users = p.split(",").collect::<Vec<&str>>();
+  if p.len() > 1000 {
+    return Err(RespErr::BadRequest { msg: String::from("Max 1000 usernames allowed") });
+  }
+  let mut stats: Vec<WitnessStat> = Vec::new();
+  for user in users {
+    stats.push(
+      ctx.db.witness_stats
+        .find_one(doc! { "_id": &user }).await
+        .map_err(|e| RespErr::DbErr { msg: e.to_string() })?
+        .unwrap_or(WitnessStat {
+          proposer: String::from(user),
+          block_count: None,
+          election_count: None,
+          last_block: None,
+          last_epoch: None,
+        })
+    );
+  }
   Ok(HttpResponse::Ok().json(stats))
 }
 
@@ -228,6 +212,7 @@ async fn get_epoch(path: web::Path<String>, ctx: web::Data<Context>) -> Result<H
 #[derive(Debug, Deserialize)]
 struct ListBlockOpts {
   last_block_id: Option<i64>,
+  offset: Option<u64>,
   count: Option<i64>,
   proposer: Option<String>,
   epoch: Option<i64>,
@@ -235,12 +220,17 @@ struct ListBlockOpts {
 
 #[get("/blocks")]
 async fn list_blocks(params: web::Query<ListBlockOpts>, ctx: web::Data<Context>) -> Result<HttpResponse, RespErr> {
+  let offset = params.offset.unwrap_or(0);
+  if offset > 100000 {
+    return Err(RespErr::BadRequest { msg: String::from("Invalid offset") });
+  }
   let last_block_id = params.last_block_id;
   let proposer = params.proposer.clone();
   let epoch = params.epoch;
   let count = min(max(1, params.count.unwrap_or(100)), 100);
   let opt = FindOptions::builder()
     .sort(doc! { "be_info.block_id": -1 })
+    .skip(offset)
     .build();
   let mut filter = doc! { "be_info": doc! {"$exists": true} };
   if last_block_id.is_some() {
