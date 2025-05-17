@@ -9,7 +9,7 @@ use futures_util::StreamExt;
 use serde_json;
 use chrono::Utc;
 use ipfs_dag::put_dag;
-use std::{ error::Error, fs, path::Path, process, sync::Arc };
+use std::{ error::Error, fs, io, path::Path, process, sync::Arc };
 use log::{ info, debug, error };
 use crate::mongo::MongoDB;
 use crate::types::cv::{ CVContractCode, CVStatus };
@@ -40,6 +40,12 @@ fn delete_dir_contents(read_dir_res: Result<fs::ReadDir, std::io::Error>) {
       }
     }
   }
+}
+
+fn create_dir_if_not_exists(path: String) -> io::Result<()> {
+  fs::create_dir(path).or_else(|e| {
+    if e.kind() == io::ErrorKind::AlreadyExists { Ok(()) } else { Err(e) }
+  })
 }
 
 async fn update_status(db: &MongoDB, addr: &str, status: CVStatus) -> Result<UpdateResult, mongodb::error::Error> {
@@ -87,6 +93,11 @@ impl Compiler {
     let docker = Arc::clone(&self.docker);
     let image = self.image.clone();
     let compiler_dir = self.compiler_dir.clone();
+    let mkdir = create_dir_if_not_exists(format!("{}/src", compiler_dir));
+    if mkdir.is_err() {
+      error!("Failed to create src directory");
+      return;
+    }
     debug!("Spawning new compiler thread");
     tokio::spawn(async move {
       let mut r = running.lock().await;
