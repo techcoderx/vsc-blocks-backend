@@ -126,6 +126,12 @@ pub struct Contract {
   pub creator: String,
   pub owner: String,
   pub creation_height: i64,
+  pub runtime: ContractRuntime,
+}
+
+#[derive(Clone, Serialize, Deserialize)]
+pub struct ContractRuntime {
+  pub value: String,
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]

@@ -139,7 +139,7 @@ impl Compiler {
           error!("There are no files to compile");
           break 'mainloop;
         }
-        if &next_contract.lang == "assemblyscript" {
+        if &next_contract.lang == "assembly-script" {
           // assemblyscript
           let cont_name = "as-compiler";
           let mut pkg_json: serde_json::Value = serde_json

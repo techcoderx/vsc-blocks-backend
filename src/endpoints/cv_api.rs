@@ -162,7 +162,6 @@ async fn login(payload: String, ctx: web::Data<Context>) -> Result<HttpResponse,
 #[derive(Serialize, Deserialize)]
 struct ReqVerifyNew {
   license: String,
-  lang: String,
   dependencies: Value,
 }
 
@@ -200,8 +199,8 @@ async fn verify_new(
   }
 
   // check required dependencies
-  match req_data.lang.as_str() {
-    "assemblyscript" => {
+  match contract.runtime.value.as_str() {
+    "assembly-script" => {
       if !req_data.dependencies.is_object() {
         return Err(RespErr::BadRequest { msg: String::from("Dependencies must be an object") });
       }
@@ -248,7 +247,7 @@ async fn verify_new(
     status: CVStatus::Pending.to_string(),
     exports: None,
     license: req_data.license.clone(),
-    lang: req_data.lang.clone(),
+    lang: contract.runtime.value.clone(),
     dependencies: Some(req_data.dependencies.clone()),
   };
   ctx.db.cv_contracts.insert_one(new_cv).await.map_err(|e| RespErr::DbErr { msg: e.to_string() })?;
@@ -296,7 +295,7 @@ async fn upload_file(
     Some(cv) => {
       if cv.status != "pending" {
         return Err(RespErr::BadRequest { msg: format!("Status needs to be pending, it is currently {}", cv.status) });
-      } else if cv.lang == "assemblyscript" && (&form.filename.0 == "pnpm-lock.yml" || &form.filename.0 == "pnpm-lock.yaml") {
+      } else if cv.lang == "assembly-script" && (&form.filename.0 == "pnpm-lock.yml" || &form.filename.0 == "pnpm-lock.yaml") {
         return Err(RespErr::BadRequest { msg: String::from("pnpm-lock.yaml is a reserved filename for pnpm lock files.") });
       }
     }
@@ -343,7 +342,7 @@ async fn upload_complete(path: web::Path<String>, req: HttpRequest, ctx: web::Da
 
 #[get("/languages")]
 async fn list_langs() -> Result<HttpResponse, RespErr> {
-  Ok(HttpResponse::Ok().json(vec!["assemblyscript", "golang"]))
+  Ok(HttpResponse::Ok().json(vec!["assembly-script", "go"]))
 }
 
 #[get("/licenses")]

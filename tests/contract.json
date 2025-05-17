@@ -6,5 +6,8 @@
   "description": "",
   "creator": "avalonreport",
   "owner": "avalonreport",
-  "creation_height": 84440814
+  "creation_height": 84440814,
+  "runtime": {
+    "value": "assembly-script"
+  }
 }

@@ -78,7 +78,6 @@ async fn test_e2e_verify_contract_assemblyscript() {
     .set_json(
       json!({
         "license": "MIT",
-        "lang": "assemblyscript",
         "dependencies": {
           "@vsc.eco/sdk": "^0.1.4",
           "assemblyscript": "^0.27.31",
@@ -104,7 +103,7 @@ async fn test_e2e_verify_contract_assemblyscript() {
   assert_eq!(resp.dependencies.is_some(), true);
   assert_eq!(resp.files.is_some(), true);
   assert_eq!(resp.files.unwrap().len(), 0);
-  assert_eq!(&resp.lang.unwrap(), "assemblyscript");
+  assert_eq!(&resp.lang.unwrap(), "assembly-script");
   assert_eq!(&resp.license.unwrap(), "MIT");
 
   // Test file upload
