@@ -91,8 +91,6 @@ async fn main() -> std::io::Result<()> {
           .service(be_api::list_blocks)
           .service(be_api::get_block)
           .service(be_api::get_tx_output)
-          .service(be_api::list_contracts)
-          .service(be_api::get_contract)
           .service(be_api::bridge_stats)
           .service(be_api::addr_stats)
           .service(be_api::search)
