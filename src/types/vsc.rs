@@ -21,20 +21,6 @@ pub struct BridgeStats {
 }
 
 #[derive(Clone, Serialize, Deserialize)]
-pub struct LedgerBalance {
-  pub account: String,
-  pub block_height: u64,
-  pub hbd: u64,
-  pub hbd_avg: u64,
-  pub hbd_modify: u64,
-  pub hbd_savings: u64,
-  pub hive: u64,
-  pub hive_consensus: u64,
-  pub hive_unstaking: Option<i64>,
-  pub rc_used: Option<RcUsedAtHeight>,
-}
-
-#[derive(Clone, Serialize, Deserialize)]
 pub struct LedgerActions {
   pub id: String,
   pub amount: u64,
@@ -74,12 +60,6 @@ pub struct LedgerOpLog {
   pub opidx: u64,
   pub blockheight: u64,
   pub params: Option<Value>,
-}
-
-#[derive(Clone, Serialize, Deserialize)]
-pub struct RcUsedAtHeight {
-  pub block_height: u64,
-  pub amount: u64,
 }
 
 #[derive(Clone, Serialize, Deserialize)]

@@ -1,16 +1,12 @@
 use actix_web::{ get, web, HttpResponse, Responder };
 use futures_util::StreamExt;
-use mongodb::{ bson::{ doc, Bson }, options::{ FindOneOptions, FindOptions } };
+use mongodb::{ bson::doc, options::{ FindOptions } };
 use serde::Deserialize;
 use serde_json::{ json, Value };
 use std::cmp::{ min, max };
 use crate::{
   config::config,
-  types::{
-    hive::{ CustomJson, TxByHash },
-    server::{ Context, RespErr },
-    vsc::{ BridgeStats, LedgerBalance, RcUsedAtHeight, UserStats, WitnessStat },
-  },
+  types::{ hive::{ CustomJson, TxByHash }, server::{ Context, RespErr }, vsc::{ BridgeStats, UserStats, WitnessStat } },
 };
 
 #[get("")]
@@ -99,67 +95,6 @@ async fn get_witness_stats_many(path: web::Path<String>, ctx: web::Data<Context>
     );
   }
   Ok(HttpResponse::Ok().json(stats))
-}
-
-#[get("/balance/{username}")]
-async fn get_balance(path: web::Path<String>, ctx: web::Data<Context>) -> Result<HttpResponse, RespErr> {
-  let user = path.into_inner(); // must be prefixed by hive: or did: (!)
-  let opt = FindOneOptions::builder()
-    .sort(doc! { "block_height": -1 })
-    .build();
-  let mut bal = ctx.db.balances
-    .find_one(doc! { "account": user.clone() })
-    .with_options(opt.clone()).await
-    .map_err(|e| RespErr::DbErr { msg: e.to_string() })?
-    .unwrap_or(LedgerBalance {
-      account: user.clone(),
-      block_height: 0,
-      hbd: 0,
-      hbd_avg: 0,
-      hbd_modify: 0,
-      hbd_savings: 0,
-      hive: 0,
-      hive_consensus: 0,
-      hive_unstaking: None,
-      rc_used: None,
-    });
-  bal.rc_used = Some(
-    ctx.db.rc
-      .find_one(doc! { "account": user.clone() })
-      .with_options(opt.clone()).await
-      .map_err(|e| RespErr::DbErr { msg: e.to_string() })?
-      .unwrap_or(RcUsedAtHeight {
-        block_height: 0,
-        amount: 0,
-      })
-  );
-  let unstaking_pipeline = vec![
-    doc! {
-      "$match": doc! {
-        "to": user.clone(),
-        "status": "pending",
-        "type": "consensus_unstake"
-      }
-    },
-    doc! {
-      "$group": doc! {
-        "_id": Bson::Null,
-        "totalAmount": doc! {"$sum": "$amount"}
-      }
-    }
-  ];
-  let mut unstaking_cursor = ctx.db.ledger_actions
-    .aggregate(unstaking_pipeline).await
-    .map_err(|e| RespErr::DbErr { msg: e.to_string() })?;
-  bal.hive_unstaking = Some(
-    unstaking_cursor
-      .next().await
-      .transpose()
-      .map_err(|e| RespErr::DbErr { msg: e.to_string() })?
-      .map(|d| d.get_i64("totalAmount").unwrap_or(0))
-      .unwrap_or(0)
-  );
-  Ok(HttpResponse::Ok().json(bal))
 }
 
 #[derive(Debug, Deserialize)]
