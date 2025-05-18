@@ -24,10 +24,11 @@ pub struct ServerConfig {
   pub port: u16,
 }
 
-#[derive(Serialize, Deserialize)]
+#[derive(Serialize, Deserialize, Clone)]
 pub struct ASCompilerConf {
   pub image: String,
   pub src_dir: String,
+  pub src_dir_host: Option<String>,
 }
 
 #[derive(Serialize, Deserialize)]
@@ -80,6 +81,7 @@ impl TomlConfig {
         ascompiler: ASCompilerConf {
           image: String::from("as-compiler"),
           src_dir: format!("{}/as_compiler", current_dir().unwrap().to_str().unwrap()),
+          src_dir_host: None,
         },
       };
       let serialized = toml::ser::to_string(&default_conf).unwrap();

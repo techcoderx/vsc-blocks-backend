@@ -40,7 +40,7 @@ async fn main() -> std::io::Result<()> {
       process::exit(1);
     }
   }
-  let compiler = compiler::Compiler::init(&db, config.ascompiler.image.clone(), config.ascompiler.src_dir.clone());
+  let compiler = compiler::Compiler::init(&db, config.ascompiler.clone());
   compiler.notify();
   let http_client = reqwest::Client::new();
   if config.be_indexer.unwrap_or(false) {

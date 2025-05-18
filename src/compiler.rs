@@ -11,6 +11,7 @@ use chrono::Utc;
 use ipfs_dag::put_dag;
 use std::{ error::Error, fs, io, path::Path, process, sync::Arc };
 use log::{ info, debug, error };
+use crate::config::ASCompilerConf;
 use crate::mongo::MongoDB;
 use crate::types::cv::{ CVContractCode, CVStatus };
 use crate::types::vsc::json_to_bson;
@@ -59,10 +60,11 @@ pub struct Compiler {
   docker: Arc<Docker>,
   image: String,
   compiler_dir: String,
+  compiler_dir_host: String,
 }
 
 impl Compiler {
-  pub fn init(db: &MongoDB, image: String, compiler_dir: String) -> Self {
+  pub fn init(db: &MongoDB, options: ASCompilerConf) -> Self {
     let docker = match Docker::connect_with_local_defaults() {
       Ok(d) => d,
       Err(e) => {
@@ -70,12 +72,14 @@ impl Compiler {
         process::exit(1)
       }
     };
+    let cdh = options.src_dir_host.unwrap_or(options.src_dir.clone());
     return Compiler {
       db: db.clone(),
       running: Arc::new(Mutex::new(false)),
       docker: Arc::new(docker),
-      image,
-      compiler_dir,
+      image: options.image,
+      compiler_dir: options.src_dir,
+      compiler_dir_host: cdh,
     };
   }
 
@@ -93,6 +97,7 @@ impl Compiler {
     let docker = Arc::clone(&self.docker);
     let image = self.image.clone();
     let compiler_dir = self.compiler_dir.clone();
+    let compiler_dir_host = self.compiler_dir_host.clone();
     let mkdir = create_dir_if_not_exists(format!("{}/src", compiler_dir));
     if mkdir.is_err() {
       error!("Failed to create src directory");
@@ -167,7 +172,7 @@ impl Compiler {
             image: Some(image.as_str()), // Image name
             host_config: Some(HostConfig {
               // Volume mount
-              binds: Some(vec![format!("{}:/workdir/compiler", compiler_dir)]),
+              binds: Some(vec![format!("{}:/workdir/compiler", compiler_dir_host)]),
               // Auto-remove container on exit (equivalent to --rm)
               auto_remove: Some(true),
               ..Default::default()

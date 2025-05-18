@@ -2,7 +2,13 @@ use serde::Deserialize;
 use serde_json::{ self, json, Value };
 use actix_web::{ middleware::NormalizePath, test, web, App };
 use std::env;
-use vsc_blocks_backend::{ compiler::Compiler, endpoints::cv_api, mongo::MongoDB, types::{ server::Context, vsc::Contract } };
+use vsc_blocks_backend::{
+  compiler::Compiler,
+  config::ASCompilerConf,
+  endpoints::cv_api,
+  mongo::MongoDB,
+  types::{ server::Context, vsc::Contract },
+};
 
 #[derive(Clone, Deserialize)]
 struct SuccessResp {
@@ -50,7 +56,7 @@ async fn test_e2e_verify_contract_assemblyscript() {
   let asc_dir = env
     ::var("VSC_CV_TEST_ASC_DIR")
     .unwrap_or_else(|_| String::from("/Users/techcoderx/vsc-blocks-backend/as_compiler"));
-  let compiler = Compiler::init(&db, String::from("as-compiler"), asc_dir);
+  let compiler = Compiler::init(&db, ASCompilerConf { image: String::from("as-compiler"), src_dir: asc_dir, src_dir_host: None });
   compiler.notify();
   let server_ctx = Context { db: db, compiler: compiler.clone(), http_client: http_client.clone() };
   let app = test::init_service(
