@@ -83,7 +83,14 @@ impl ElectionIndexer {
             sleep(Duration::from_secs(120)).await;
             continue 'mainloop;
           }
-          let tx = tx.unwrap().json::<TxByHash<CustomJson>>().await.unwrap();
+          let tx = match tx.unwrap().json::<TxByHash<CustomJson>>().await {
+            Err(e) => {
+              error!("{}", e.to_string());
+              sleep(Duration::from_secs(60)).await;
+              continue 'mainloop;
+            }
+            Ok(t) => t,
+          };
           // there should be only one operation here
           let j = match serde_json::from_str::<Value>(&tx.transaction_json.operations[0].value.json) {
             Ok(json) => json,
