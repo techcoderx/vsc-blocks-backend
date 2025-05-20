@@ -35,7 +35,7 @@ async fn props(ctx: web::Data<Context>) -> Result<HttpResponse, RespErr> {
   let last_l1_block = match
     ctx.db.l1_blocks.find_one(doc! { "type": "metadata" }).await.map_err(|e| RespErr::DbErr { msg: e.to_string() })?
   {
-    Some(state) => state.head_height,
+    Some(state) => state.last_processed_block,
     None => 0,
   };
   let tx_count = ctx.db.tx_pool.estimated_document_count().await.map_err(|e| RespErr::DbErr { msg: e.to_string() })?;

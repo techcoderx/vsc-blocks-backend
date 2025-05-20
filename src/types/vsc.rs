@@ -4,7 +4,7 @@ use mongodb::bson;
 
 #[derive(Clone, Debug, Deserialize)]
 pub struct HiveBlocksSyncState {
-  pub head_height: i64,
+  pub last_processed_block: i64,
 }
 
 #[derive(Clone, Debug, Deserialize)]
