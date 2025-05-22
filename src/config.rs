@@ -39,6 +39,11 @@ pub struct AuthConf {
   pub key: Option<String>,
 }
 
+#[derive(Serialize, Deserialize, Clone)]
+pub struct DiscordConf {
+  pub token: String,
+}
+
 #[derive(Serialize, Deserialize)]
 pub struct TomlConfig {
   pub log_level: Option<String>,
@@ -48,6 +53,7 @@ pub struct TomlConfig {
   pub auth: AuthConf,
   pub server: ServerConfig,
   pub ascompiler: ASCompilerConf,
+  pub discord: Option<DiscordConf>,
 }
 
 impl TomlConfig {
@@ -83,6 +89,7 @@ impl TomlConfig {
           src_dir: format!("{}/as_compiler", current_dir().unwrap().to_str().unwrap()),
           src_dir_host: None,
         },
+        discord: None,
       };
       let serialized = toml::ser::to_string(&default_conf).unwrap();
       let _ = fs::write(&filepath, serialized);

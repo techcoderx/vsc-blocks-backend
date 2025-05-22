@@ -5,3 +5,4 @@ pub mod types;
 pub mod endpoints;
 pub mod indexer;
 pub mod compiler;
+pub mod helpers;

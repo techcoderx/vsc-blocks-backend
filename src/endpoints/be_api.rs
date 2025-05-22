@@ -7,6 +7,7 @@ use std::cmp::{ min, max };
 use crate::{
   config::config,
   types::{ hive::{ CustomJson, TxByHash }, server::{ Context, RespErr }, vsc::{ BridgeStats, UserStats, WitnessStat } },
+  helpers::db::get_props,
 };
 
 #[get("")]
@@ -16,41 +17,8 @@ async fn hello() -> impl Responder {
 
 #[get("/props")]
 async fn props(ctx: web::Data<Context>) -> Result<HttpResponse, RespErr> {
-  let pipeline = vec![doc! {
-      "$group": {
-        "_id": "$account"
-      }
-    }, doc! { "$count": "total" }];
-
-  let mut wit_cursor = ctx.db.witnesses.aggregate(pipeline).await.map_err(|e| RespErr::DbErr { msg: e.to_string() })?;
-  let witness_count = wit_cursor
-    .next().await
-    .transpose()
-    .map_err(|e| RespErr::DbErr { msg: e.to_string() })?
-    .map(|d| d.get_i32("total").unwrap_or(0))
-    .unwrap_or(0);
-  let contracts = ctx.db.contracts.estimated_document_count().await.map_err(|e| RespErr::DbErr { msg: e.to_string() })?;
-  let epoch = ctx.db.elections.estimated_document_count().await.map_err(|e| RespErr::DbErr { msg: e.to_string() })?;
-  let block_count = ctx.db.blocks.estimated_document_count().await.map_err(|e| RespErr::DbErr { msg: e.to_string() })?;
-  let last_l1_block = match
-    ctx.db.l1_blocks.find_one(doc! { "type": "metadata" }).await.map_err(|e| RespErr::DbErr { msg: e.to_string() })?
-  {
-    Some(state) => state.last_processed_block,
-    None => 0,
-  };
-  let tx_count = ctx.db.tx_pool.estimated_document_count().await.map_err(|e| RespErr::DbErr { msg: e.to_string() })?;
-  Ok(
-    HttpResponse::Ok().json(
-      json!({
-        "last_processed_block": last_l1_block,
-        "l2_block_height": block_count,
-        "witnesses": witness_count,
-        "epoch": epoch.saturating_sub(1),
-        "contracts": contracts,
-        "transactions": tx_count
-      })
-    )
-  )
+  let props = get_props(&ctx.db).await.map_err(|e| RespErr::DbErr { msg: e.to_string() })?;
+  Ok(HttpResponse::Ok().json(props))
 }
 
 #[get("/witness/{username}/stats")]

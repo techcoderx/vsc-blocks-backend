@@ -3,8 +3,8 @@ use actix_cors::Cors;
 use clap::Parser;
 use reqwest;
 use env_logger;
-use std::process;
-use log::{ error, info };
+use std::{ process, str::FromStr };
+use log::{ error, info, LevelFilter };
 mod config;
 mod constants;
 mod mongo;
@@ -12,6 +12,8 @@ mod types;
 mod endpoints;
 mod indexer;
 mod compiler;
+mod chatbot;
+mod helpers;
 use types::server::Context;
 use endpoints::{ be_api, cv_api };
 
@@ -21,10 +23,21 @@ async fn main() -> std::io::Result<()> {
     config::TomlConfig::dump_config_file();
   }
   let config = &config::config;
-  if std::env::var("RUST_LOG").is_err() {
-    std::env::set_var("RUST_LOG", config.log_level.clone().unwrap_or(String::from("info")));
-  }
-  env_logger::init();
+  let mut log_builder = env_logger::Builder::new();
+  log_builder
+    .filter(
+      None,
+      LevelFilter::from_str(
+        std::env
+          ::var("RUST_LOG")
+          .unwrap_or(config.log_level.clone().unwrap_or(String::from("info")))
+          .as_str()
+      ).unwrap()
+    )
+    .filter_module("tracing", LevelFilter::Off)
+    .filter_module("serenity", LevelFilter::Off)
+    .default_format()
+    .init();
   info!("Version: {}", env!("CARGO_PKG_VERSION"));
   let db = match mongo::MongoDB::init(config.mongo_url.clone()).await {
     Ok(d) => d,
@@ -55,6 +68,10 @@ async fn main() -> std::io::Result<()> {
       db.bridge_stats.clone()
     );
     idxer.start();
+  }
+  if config.discord.is_some() {
+    let discord_bot = chatbot::discord::DiscordBot::init(&config.discord.clone().unwrap(), &db);
+    discord_bot.start();
   }
   let server_ctx = Context { db, compiler, http_client: http_client.clone() };
   HttpServer::new(move || {

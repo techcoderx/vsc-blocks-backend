@@ -6,3 +6,6 @@ pub static ASC_JSON_NAME: &str = "assemblyscript-json";
 
 // bridge tx count tally interval (in seconds)
 pub static BRIDGE_TXS_TALLY_INTERVAL: u64 = 600;
+
+// VSC Blocks URL for Discord bot
+pub static VSC_BLOCKS_HOME: &str = "https://vsc.techcoderx.com";
