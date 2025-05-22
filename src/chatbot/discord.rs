@@ -64,6 +64,13 @@ impl DiscordBot {
       })
       .setup(|ctx, _ready, framework| {
         Box::pin(async move {
+          // Uncomment to delete global commands once
+          // you will need to import poise::serenity_prelude::CacheHttp
+          // let http = ctx.http();
+          // let global_commands = http.get_global_commands().await?;
+          // for cmd in global_commands {
+          //   http.delete_global_command(cmd.id.into()).await?;
+          // }
           poise::builtins::register_globally(ctx, &framework.options().commands).await?;
           Ok(Data { db })
         })
