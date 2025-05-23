@@ -1,7 +1,7 @@
-use crate::mongo::MongoDB;
+use crate::{ mongo::MongoDB, types::vsc::{ WitnessStat, Witnesses } };
 use serde::Serialize;
 use futures_util::StreamExt;
-use mongodb::{ error::Error, bson::doc };
+use mongodb::{ bson::doc, error::Error, options::FindOneOptions };
 
 #[derive(Clone, Serialize)]
 pub struct Props {
@@ -43,4 +43,25 @@ pub async fn get_props(db: &MongoDB) -> Result<Props, Error> {
     contracts,
     transactions: tx_count,
   });
+}
+
+pub async fn get_witness(db: &MongoDB, user: String) -> Result<Option<Witnesses>, Error> {
+  let db = db.clone();
+  let opt = FindOneOptions::builder()
+    .sort(doc! { "height": -1 })
+    .build();
+  let result = db.witnesses.find_one(doc! { "account": &user }).with_options(opt).await?;
+  Ok(result)
+}
+
+pub async fn get_witness_stats(db: &MongoDB, user: String) -> Result<WitnessStat, Error> {
+  let db = db.clone();
+  let stats = db.witness_stats.find_one(doc! { "_id": &user }).await?.unwrap_or(WitnessStat {
+    proposer: user.clone(),
+    block_count: None,
+    election_count: None,
+    last_block: None,
+    last_epoch: None,
+  });
+  Ok(stats)
 }

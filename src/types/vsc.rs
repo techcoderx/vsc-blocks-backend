@@ -71,19 +71,19 @@ pub struct DIDKey {
 
 #[derive(Clone, Serialize, Deserialize)]
 pub struct Witnesses {
-  account: String,
-  height: i64,
-  did_keys: Vec<DIDKey>,
-  enabled: bool,
-  gateway_key: String,
-  git_commit: String,
-  net_id: String,
-  peer_addrs: Vec<String>,
-  peer_id: String,
-  protocol_version: i64,
-  ts: String,
-  tx_id: String,
-  version_id: String,
+  pub account: String,
+  pub height: i64,
+  pub did_keys: Vec<DIDKey>,
+  pub enabled: bool,
+  pub gateway_key: String,
+  pub git_commit: String,
+  pub net_id: String,
+  pub peer_addrs: Vec<String>,
+  pub peer_id: String,
+  pub protocol_version: i64,
+  pub ts: String,
+  pub tx_id: String,
+  pub version_id: String,
 }
 
 #[derive(Clone, Serialize, Deserialize)]

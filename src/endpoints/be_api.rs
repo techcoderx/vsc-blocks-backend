@@ -6,8 +6,8 @@ use serde_json::{ json, Value };
 use std::cmp::{ min, max };
 use crate::{
   config::config,
+  helpers::db::{ get_props, get_witness_stats },
   types::{ hive::{ CustomJson, TxByHash }, server::{ Context, RespErr }, vsc::{ BridgeStats, UserStats, WitnessStat } },
-  helpers::db::get_props,
 };
 
 #[get("")]
@@ -22,18 +22,9 @@ async fn props(ctx: web::Data<Context>) -> Result<HttpResponse, RespErr> {
 }
 
 #[get("/witness/{username}/stats")]
-async fn get_witness_stats(path: web::Path<String>, ctx: web::Data<Context>) -> Result<HttpResponse, RespErr> {
+async fn witness_stats(path: web::Path<String>, ctx: web::Data<Context>) -> Result<HttpResponse, RespErr> {
   let user = path.into_inner();
-  let stats = ctx.db.witness_stats
-    .find_one(doc! { "_id": &user }).await
-    .map_err(|e| RespErr::DbErr { msg: e.to_string() })?
-    .unwrap_or(WitnessStat {
-      proposer: user.clone(),
-      block_count: None,
-      election_count: None,
-      last_block: None,
-      last_epoch: None,
-    });
+  let stats = get_witness_stats(&ctx.db, user).await.map_err(|e| RespErr::DbErr { msg: e.to_string() })?;
   Ok(HttpResponse::Ok().json(stats))
 }
 
@@ -49,18 +40,7 @@ async fn get_witness_stats_many(path: web::Path<String>, ctx: web::Data<Context>
   }
   let mut stats: Vec<WitnessStat> = Vec::new();
   for user in users {
-    stats.push(
-      ctx.db.witness_stats
-        .find_one(doc! { "_id": &user }).await
-        .map_err(|e| RespErr::DbErr { msg: e.to_string() })?
-        .unwrap_or(WitnessStat {
-          proposer: String::from(user),
-          block_count: None,
-          election_count: None,
-          last_block: None,
-          last_epoch: None,
-        })
-    );
+    stats.push(get_witness_stats(&ctx.db, String::from(user)).await.map_err(|e| RespErr::DbErr { msg: e.to_string() })?);
   }
   Ok(HttpResponse::Ok().json(stats))
 }
