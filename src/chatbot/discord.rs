@@ -1,8 +1,9 @@
 use crate::{
-  constants::{ L1_EXPLORER_URL, VSC_BLOCKS_HOME },
   config::DiscordConf,
+  constants::{ L1_EXPLORER_URL, VSC_BLOCKS_HOME },
   helpers::db::{ get_props, get_witness, get_witness_stats },
   mongo::MongoDB,
+  types::vsc::ElectionMember,
 };
 use log::info;
 use mongodb::bson::doc;
@@ -100,8 +101,76 @@ async fn witness(
   Ok(())
 }
 
+#[poise::command(
+  slash_command,
+  name_localized("en-US", "epoch"),
+  description_localized("en-US", "Retrieve election results of a VSC epoch")
+)]
+async fn epoch(ctx: Context<'_>, #[description = "VSC epoch number"] #[min = 0] epoch_num: u32) -> Result<(), Error> {
+  ctx.defer().await?;
+  let epoch = ctx.data().db.elections.find_one(doc! { "epoch": epoch_num as i32 }).await?;
+  if epoch.is_none() {
+    ctx.reply(format!("Epoch {} does not exist.", epoch_num)).await?;
+    return Ok(());
+  }
+  let epoch = epoch.unwrap();
+  let mut members = epoch.members.clone();
+  if members.len() > 40 {
+    members.truncate(40);
+    members.push(ElectionMember { account: format!("..."), key: format!("") });
+  }
+  let embed = CreateEmbed::new()
+    .title("VSC Epoch")
+    .url(format!("{}/epoch/{}", VSC_BLOCKS_HOME, epoch_num))
+    .fields(
+      vec![
+        ("Epoch", epoch_num.to_formatted_string(&Locale::en), true),
+        (
+          "Timestamp",
+          epoch.be_info
+            .clone()
+            .map(|d| time(d.ts, 'R'))
+            .unwrap_or(String::from("*Indexing...*")),
+          true,
+        ),
+        (
+          "L1 Block",
+          format!("[{}]({}/b/{})", epoch.block_height.to_formatted_string(&Locale::en), L1_EXPLORER_URL, epoch.block_height),
+          true,
+        ),
+        (
+          &format!("Elected Members ({})", epoch.members.len()),
+          members
+            .iter()
+            .map(|m| m.account.clone())
+            .collect::<Vec<String>>()
+            .join(", "),
+          false,
+        ),
+        ("Election Data CID", epoch.data, false),
+        ("Proposed in Tx", format!("[{}]({}/tx/{})", epoch.tx_id, VSC_BLOCKS_HOME, epoch.tx_id), false),
+        ("Proposer", epoch.proposer, true),
+        (
+          "Participation",
+          match epoch_num {
+            0 => String::from("N/A"),
+            _ =>
+              epoch.be_info
+                .clone()
+                .map(|d| format!("{:.2}%", (100.0 * (d.voted_weight as f64)) / (d.eligible_weight as f64)))
+                .unwrap_or(String::from("*Indexing...*")),
+          },
+          true,
+        )
+      ]
+    );
+  let reply = CreateReply::default().embed(embed);
+  ctx.send(reply).await?;
+  Ok(())
+}
+
 #[poise::command(slash_command, name_localized("en-US", "block"), description_localized("en-US", "Retrieve a VSC block"))]
-async fn vsc_block(ctx: Context<'_>, #[description = "VSC block number"] #[min = 1] block_num: u32) -> Result<(), Error> {
+async fn block(ctx: Context<'_>, #[description = "VSC block number"] #[min = 1] block_num: u32) -> Result<(), Error> {
   ctx.defer().await?;
   let block = ctx.data().db.blocks.find_one(doc! { "be_info.block_id": block_num as i32 }).await?;
   if block.is_none() {
@@ -116,9 +185,13 @@ async fn vsc_block(ctx: Context<'_>, #[description = "VSC block number"] #[min =
       vec![
         ("Block Number", block_num.to_formatted_string(&Locale::en), true),
         ("Timestamp", time(block.ts.clone(), 'R'), true),
-        ("Slot Height", block.slot_height.to_formatted_string(&Locale::en), true),
+        (
+          "Slot Height",
+          format!("[{}]({}/b/{})", block.slot_height.to_formatted_string(&Locale::en), L1_EXPLORER_URL, block.slot_height),
+          true,
+        ),
         ("Block CID", block.block, false),
-        ("Proposed In Tx", format!("[{}]({}/tx/{})", block.id, L1_EXPLORER_URL, block.id), false),
+        ("Proposed In Tx", format!("[{}]({}/tx/{})", block.id, VSC_BLOCKS_HOME, block.id), false),
         ("Proposer", block.proposer, true),
         (
           "Participation",
@@ -153,7 +226,7 @@ impl DiscordBot {
     let framework = poise::Framework
       ::builder()
       .options(poise::FrameworkOptions {
-        commands: vec![stats(), witness(), vsc_block()],
+        commands: vec![stats(), witness(), epoch(), block()],
         ..Default::default()
       })
       .setup(|ctx, _ready, framework| {
