@@ -13,6 +13,7 @@ use crate::types::{
     IndexerState,
     Ledger,
     LedgerActions,
+    LedgerBalance,
     TransactionRecord,
     WitnessStat,
     Witnesses,
@@ -30,6 +31,7 @@ pub struct MongoDB {
   pub tx_pool: Collection<TransactionRecord>,
   pub ledger_actions: Collection<LedgerActions>,
   pub ledger: Collection<Ledger>,
+  pub ledger_bal: Collection<LedgerBalance>,
 
   // be-api additional data
   pub indexer2: Collection<IndexerState>,
@@ -59,6 +61,7 @@ impl MongoDB {
       tx_pool: db.collection("transaction_pool"),
       ledger_actions: db.collection("ledger_actions"),
       ledger: db.collection("ledger"),
+      ledger_bal: db.collection("ledger_balances"),
       indexer2: db2.collection("indexer_state"),
       witness_stats: db2.collection("witness_stats"),
       bridge_stats: db2.collection("bridge_stats"),

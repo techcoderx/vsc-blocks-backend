@@ -47,6 +47,14 @@ pub struct Ledger {
 }
 
 #[derive(Clone, Serialize, Deserialize)]
+pub struct LedgerBalance {
+  pub hbd: u64,
+  pub hbd_savings: u64,
+  pub hive: u64,
+  pub hive_consensus: u64,
+}
+
+#[derive(Clone, Serialize, Deserialize)]
 pub struct LedgerOpLog {
   pub to: String,
   pub from: String,

@@ -1,7 +1,7 @@
-use crate::{ mongo::MongoDB, types::vsc::{ WitnessStat, Witnesses } };
+use crate::{ mongo::MongoDB, types::vsc::{ LedgerBalance, WitnessStat, Witnesses } };
 use serde::Serialize;
 use futures_util::StreamExt;
-use mongodb::{ bson::doc, error::Error, options::FindOneOptions };
+use mongodb::{ bson::{ doc, Bson }, error::Error, options::FindOneOptions };
 
 #[derive(Clone, Serialize)]
 pub struct Props {
@@ -64,4 +64,48 @@ pub async fn get_witness_stats(db: &MongoDB, user: String) -> Result<WitnessStat
     last_epoch: None,
   });
   Ok(stats)
+}
+
+pub async fn get_user_balance(db: &MongoDB, user: String) -> Result<LedgerBalance, Error> {
+  let db = db.clone();
+  let opt = FindOneOptions::builder()
+    .sort(doc! { "block_height": -1 })
+    .build();
+  let bal = db.ledger_bal
+    .find_one(doc! { "account": user.clone() })
+    .with_options(opt.clone()).await?
+    .unwrap_or(LedgerBalance {
+      hbd: 0,
+      hbd_savings: 0,
+      hive: 0,
+      hive_consensus: 0,
+    });
+  Ok(bal)
+}
+
+pub async fn get_user_cons_unstaking(db: &MongoDB, user: String) -> Result<i64, Error> {
+  let db = db.clone();
+  let unstaking_pipeline = vec![
+    doc! {
+      "$match": doc! {
+        "to": user.clone(),
+        "status": "pending",
+        "type": "consensus_unstake"
+      }
+    },
+    doc! {
+      "$group": doc! {
+        "_id": Bson::Null,
+        "totalAmount": doc! {"$sum": "$amount"}
+      }
+    }
+  ];
+  let mut unstaking_cursor = db.ledger_actions.aggregate(unstaking_pipeline).await?;
+  Ok(
+    unstaking_cursor
+      .next().await
+      .transpose()?
+      .map(|d| d.get_i64("totalAmount").unwrap_or(0))
+      .unwrap_or(0)
+  )
 }

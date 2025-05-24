@@ -1,15 +1,17 @@
+use std::ops::Div;
+
 use crate::{
   config::DiscordConf,
   constants::{ L1_EXPLORER_URL, VSC_BLOCKS_HOME },
-  helpers::db::{ get_props, get_witness, get_witness_stats },
+  helpers::db::{ get_props, get_user_balance, get_user_cons_unstaking, get_witness, get_witness_stats },
   mongo::MongoDB,
   types::vsc::ElectionMember,
 };
 use log::info;
+use formatter::thousand_separator;
 use mongodb::bson::doc;
 use tokio;
 use poise::{ serenity_prelude::{ self, CreateEmbed, Timestamp }, CreateReply };
-use num_format::{ Locale, ToFormattedString };
 
 struct Data {
   pub db: MongoDB,
@@ -38,16 +40,12 @@ async fn stats(ctx: Context<'_>) -> Result<(), Error> {
     .url(VSC_BLOCKS_HOME)
     .fields(
       vec![
-        ("Hive Block Height", props.last_processed_block.to_formatted_string(&Locale::en), true),
-        ("VSC Block Height", props.l2_block_height.to_formatted_string(&Locale::en), true),
-        ("Transactions", props.transactions.to_formatted_string(&Locale::en), true)
-      ]
-    )
-    .fields(
-      vec![
-        ("Epoch", props.epoch.to_formatted_string(&Locale::en), true),
-        ("Witnesses", props.witnesses.to_formatted_string(&Locale::en), true),
-        ("Contracts", props.contracts.to_formatted_string(&Locale::en), true)
+        ("Hive Block Height", thousand_separator(props.last_processed_block), true),
+        ("VSC Block Height", thousand_separator(props.l2_block_height), true),
+        ("Transactions", thousand_separator(props.transactions), true),
+        ("Epoch", thousand_separator(props.epoch), true),
+        ("Witnesses", thousand_separator(props.witnesses), true),
+        ("Contracts", thousand_separator(props.contracts), true)
       ]
     )
     .timestamp(Timestamp::now());
@@ -77,19 +75,19 @@ async fn witness(
         ("Username", username, true),
         ("Enabled", wit.enabled.to_string(), true),
         ("Last Update", time(wit.ts.clone(), 'R'), true),
-        ("Blocks Produced", stats.block_count.unwrap_or(0).to_formatted_string(&Locale::en), true),
-        ("Elections Held", stats.election_count.unwrap_or(0).to_formatted_string(&Locale::en), true),
+        ("Blocks Produced", thousand_separator(stats.block_count.unwrap_or(0)), true),
+        ("Elections Held", thousand_separator(stats.election_count.unwrap_or(0)), true),
         (
           "Last Block",
           stats.last_block
-            .map(|v| format!("[{}]({}/block/{})", v.to_formatted_string(&Locale::en), VSC_BLOCKS_HOME, v))
+            .map(|v| format!("[{}]({}/block/{})", thousand_separator(v), VSC_BLOCKS_HOME, v))
             .unwrap_or(String::from("N/A")),
           true,
         ),
         (
           "Last Epoch",
           stats.last_epoch
-            .map(|v| format!("[{}]({}/epoch/{})", v.to_formatted_string(&Locale::en), VSC_BLOCKS_HOME, v))
+            .map(|v| format!("[{}]({}/epoch/{})", thousand_separator(v), VSC_BLOCKS_HOME, v))
             .unwrap_or(String::from("N/A")),
           true,
         )
@@ -124,7 +122,7 @@ async fn epoch(ctx: Context<'_>, #[description = "VSC epoch number"] #[min = 0] 
     .url(format!("{}/epoch/{}", VSC_BLOCKS_HOME, epoch_num))
     .fields(
       vec![
-        ("Epoch", epoch_num.to_formatted_string(&Locale::en), true),
+        ("Epoch", thousand_separator(epoch_num), true),
         (
           "Timestamp",
           epoch.be_info
@@ -133,11 +131,7 @@ async fn epoch(ctx: Context<'_>, #[description = "VSC epoch number"] #[min = 0] 
             .unwrap_or(String::from("*Indexing...*")),
           true,
         ),
-        (
-          "L1 Block",
-          format!("[{}]({}/b/{})", epoch.block_height.to_formatted_string(&Locale::en), L1_EXPLORER_URL, epoch.block_height),
-          true,
-        ),
+        ("L1 Block", format!("[{}]({}/b/{})", thousand_separator(epoch.block_height), L1_EXPLORER_URL, epoch.block_height), true),
         (
           &format!("Elected Members ({})", epoch.members.len()),
           members
@@ -183,11 +177,11 @@ async fn block(ctx: Context<'_>, #[description = "VSC block number"] #[min = 1] 
     .url(format!("{}/block/{}", VSC_BLOCKS_HOME, block_num))
     .fields(
       vec![
-        ("Block Number", block_num.to_formatted_string(&Locale::en), true),
+        ("Block Number", thousand_separator(block_num), true),
         ("Timestamp", time(block.ts.clone(), 'R'), true),
         (
           "Slot Height",
-          format!("[{}]({}/b/{})", block.slot_height.to_formatted_string(&Locale::en), L1_EXPLORER_URL, block.slot_height),
+          format!("[{}]({}/b/{})", thousand_separator(block.slot_height), L1_EXPLORER_URL, block.slot_height),
           true,
         ),
         ("Block CID", block.block, false),
@@ -200,6 +194,42 @@ async fn block(ctx: Context<'_>, #[description = "VSC block number"] #[min = 1] 
             .unwrap_or(String::from("*Indexing...*")),
           true,
         )
+      ]
+    )
+    .timestamp(Timestamp::now());
+  let reply = CreateReply::default().embed(embed);
+  ctx.send(reply).await?;
+  Ok(())
+}
+
+#[poise::command(
+  slash_command,
+  name_localized("en-US", "balance"),
+  description_localized("en-US", "Retrieve address balance on VSC")
+)]
+async fn balance(
+  ctx: Context<'_>,
+  #[description = "Address"] #[min_length = 5] #[max_length = 150] address: String
+) -> Result<(), Error> {
+  if !address.starts_with("hive:") && !address.starts_with("did:") {
+    let reply = CreateReply::default().ephemeral(true).content("Address must start with hive: or did:");
+    ctx.send(reply).await?;
+    return Ok(());
+  }
+  ctx.defer().await?;
+  let bal = get_user_balance(&ctx.data().db, address.clone()).await?;
+  let cons_unstaking = get_user_cons_unstaking(&ctx.data().db, address.clone()).await?;
+  let embed = CreateEmbed::new()
+    .title("VSC Address Balance")
+    .url(format!("{}/address/{}", VSC_BLOCKS_HOME, &address))
+    .fields(
+      vec![
+        ("Address", &address, false),
+        ("HIVE", &thousand_separator((bal.hive as f64).div(1000.0)), true),
+        ("HBD", &thousand_separator((bal.hbd as f64).div(1000.0)), true),
+        ("Staked HBD", &thousand_separator((bal.hbd_savings as f64).div(1000.0)), true),
+        ("Consensus Stake", &format!("{} HIVE", thousand_separator((bal.hive_consensus as f64).div(1000.0))), true),
+        ("Consensus Unstaking", &format!("{} HIVE", thousand_separator((cons_unstaking as f64).div(1000.0))), true)
       ]
     )
     .timestamp(Timestamp::now());
@@ -226,7 +256,7 @@ impl DiscordBot {
     let framework = poise::Framework
       ::builder()
       .options(poise::FrameworkOptions {
-        commands: vec![stats(), witness(), epoch(), block()],
+        commands: vec![stats(), witness(), epoch(), block(), balance()],
         ..Default::default()
       })
       .setup(|ctx, _ready, framework| {

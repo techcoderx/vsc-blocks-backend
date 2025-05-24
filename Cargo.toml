@@ -14,6 +14,7 @@ chrono = "0.4.39"
 clap = { version = "4.5.30", features = ["derive"] }
 derive_more = { version = "1.0.0", features = ["display", "error"] }
 env_logger = "0.11.6"
+formatter = { path = "lib/formatter" }
 futures-util = "0.3.31"
 hex = "0.4.3"
 ipfs_dag = { path = "lib/ipfs_dag" }
@@ -32,4 +33,3 @@ tokio = "1.43.0"
 toml = "0.8.20"
 regex = "1.11.1"
 poise = "0.6.1"
-num-format = "0.4.4"
