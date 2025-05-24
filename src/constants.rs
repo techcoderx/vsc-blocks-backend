@@ -9,3 +9,6 @@ pub static BRIDGE_TXS_TALLY_INTERVAL: u64 = 600;
 
 // VSC Blocks URL for Discord bot
 pub static VSC_BLOCKS_HOME: &str = "https://vsc.techcoderx.com";
+
+// L1 Block explorer URL for Discord bot
+pub static L1_EXPLORER_URL: &str = "https://hivehub.dev";

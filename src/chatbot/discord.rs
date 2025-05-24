@@ -1,14 +1,14 @@
 use crate::{
-  constants::VSC_BLOCKS_HOME,
+  constants::{ L1_EXPLORER_URL, VSC_BLOCKS_HOME },
   config::DiscordConf,
   helpers::db::{ get_props, get_witness, get_witness_stats },
   mongo::MongoDB,
 };
 use log::info;
+use mongodb::bson::doc;
 use tokio;
 use poise::{ serenity_prelude::{ self, CreateEmbed, Timestamp }, CreateReply };
 use num_format::{ Locale, ToFormattedString };
-use chrono::{ DateTime, Utc };
 
 struct Data {
   pub db: MongoDB,
@@ -16,37 +16,12 @@ struct Data {
 type Error = Box<dyn std::error::Error + Send + Sync>;
 type Context<'a> = poise::Context<'a, Data, Error>;
 
-pub fn time_ago(date: &str, one: bool) -> String {
-  // Append 'Z' if missing to ensure UTC timezone
-  let mut date_str = date.to_string();
-  if !date.ends_with('Z') {
-    date_str.push('Z');
+fn time(timestamp: String, style: char) -> String {
+  let mut ts_str = timestamp.clone();
+  if !ts_str.ends_with('Z') {
+    ts_str.push('Z');
   }
-
-  // Parse date and convert to UTC
-  let parsed_date = DateTime::parse_from_rfc3339(&date_str)
-    .map(|dt| dt.with_timezone(&Utc))
-    .expect("Invalid date format");
-
-  let now = Utc::now();
-  let duration = (now - parsed_date).abs(); // Get absolute duration
-
-  // Calculate time components
-  let days = duration.num_days();
-  let hours = duration.num_hours() % 24;
-  let minutes = duration.num_minutes() % 60;
-  let seconds = duration.num_seconds() % 60;
-
-  // Format output based on largest time component
-  if days > 0 {
-    if one { format!("{} days ago", days) } else { format!("{} days {} hrs ago", days, hours) }
-  } else if hours > 0 {
-    if one { format!("{} hrs ago", hours) } else { format!("{} hrs {} mins ago", hours, minutes) }
-  } else if minutes > 0 {
-    format!("{} mins ago", minutes)
-  } else {
-    format!("{} secs ago", seconds)
-  }
+  format!("<t:{}:{style}>", Timestamp::parse(&ts_str).unwrap().timestamp())
 }
 
 #[poise::command(
@@ -100,7 +75,7 @@ async fn witness(
       vec![
         ("Username", username, true),
         ("Enabled", wit.enabled.to_string(), true),
-        ("Last Update", time_ago(wit.ts.as_str(), false), true),
+        ("Last Update", time(wit.ts.clone(), 'R'), true),
         ("Blocks Produced", stats.block_count.unwrap_or(0).to_formatted_string(&Locale::en), true),
         ("Elections Held", stats.election_count.unwrap_or(0).to_formatted_string(&Locale::en), true),
         (
@@ -115,6 +90,41 @@ async fn witness(
           stats.last_epoch
             .map(|v| format!("[{}]({}/epoch/{})", v.to_formatted_string(&Locale::en), VSC_BLOCKS_HOME, v))
             .unwrap_or(String::from("N/A")),
+          true,
+        )
+      ]
+    )
+    .timestamp(Timestamp::now());
+  let reply = CreateReply::default().embed(embed);
+  ctx.send(reply).await?;
+  Ok(())
+}
+
+#[poise::command(slash_command, name_localized("en-US", "block"), description_localized("en-US", "Retrieve a VSC block"))]
+async fn vsc_block(ctx: Context<'_>, #[description = "VSC block number"] #[min = 1] block_num: u32) -> Result<(), Error> {
+  ctx.defer().await?;
+  let block = ctx.data().db.blocks.find_one(doc! { "be_info.block_id": block_num as i32 }).await?;
+  if block.is_none() {
+    ctx.reply(format!("Block {} does not exist.", block_num)).await?;
+    return Ok(());
+  }
+  let block = block.unwrap();
+  let embed = CreateEmbed::new()
+    .title("VSC Block")
+    .url(format!("{}/block/{}", VSC_BLOCKS_HOME, block_num))
+    .fields(
+      vec![
+        ("Block Number", block_num.to_formatted_string(&Locale::en), true),
+        ("Timestamp", time(block.ts.clone(), 'R'), true),
+        ("Slot Height", block.slot_height.to_formatted_string(&Locale::en), true),
+        ("Block CID", block.block, false),
+        ("Proposed In Tx", format!("[{}]({}/tx/{})", block.id, L1_EXPLORER_URL, block.id), false),
+        ("Proposer", block.proposer, true),
+        (
+          "Participation",
+          block.be_info
+            .map(|d| format!("{:.2}%", (100.0 * (d.voted_weight as f64)) / (d.eligible_weight as f64)))
+            .unwrap_or(String::from("*Indexing...*")),
           true,
         )
       ]
@@ -143,7 +153,7 @@ impl DiscordBot {
     let framework = poise::Framework
       ::builder()
       .options(poise::FrameworkOptions {
-        commands: vec![stats(), witness()],
+        commands: vec![stats(), witness(), vsc_block()],
         ..Default::default()
       })
       .setup(|ctx, _ready, framework| {
