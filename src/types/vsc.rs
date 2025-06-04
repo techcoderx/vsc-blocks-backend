@@ -63,10 +63,6 @@ pub struct LedgerOpLog {
   pub memo: String,
   #[serde(rename = "type")]
   pub r#type: String,
-  pub id: String,
-  pub bidx: u64,
-  pub opidx: u64,
-  pub blockheight: u64,
   pub params: Option<Value>,
 }
 
@@ -209,18 +205,15 @@ pub struct TransactionRecord {
   // pub data: Document,
   // #[serde(rename = "anchr_block")]
   // pub anchored_block: String,
-  // #[serde(rename = "anchr_id")]
-  // pub anchored_id: String,
   // #[serde(rename = "anchr_index")]
   // pub anchored_index: i64,
-  // #[serde(rename = "anchr_opidx")]
-  // pub anchored_opidx: i64,
-  // #[serde(rename = "anchr_height")]
-  // pub anchored_height: u64,
+  #[serde(rename = "anchr_height")]
+  pub anchored_height: u64,
   // #[serde(rename = "first_seen")]
   // pub first_seen: DateTime<Utc>,
+  pub op_types: Vec<String>,
   pub output: Option<Output>,
-  pub ledger: Option<Vec<LedgerOpLog>>,
+  pub ledger: Vec<LedgerOpLog>,
 }
 
 #[derive(Clone, Serialize, Deserialize)]

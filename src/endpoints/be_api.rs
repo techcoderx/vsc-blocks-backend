@@ -177,19 +177,6 @@ async fn get_tx_output(path: web::Path<String>, ctx: web::Data<Context>) -> Resu
         if &op.id == "vsc.produce_block" {
           let block = ctx.db.blocks.find_one(doc! { "id": &trx_id }).await.map_err(|e| RespErr::DbErr { msg: e.to_string() })?;
           result.push(Some(serde_json::to_value(block).unwrap()));
-        } else if
-          &op.id == "vsc.call" ||
-          &op.id == "vsc.transfer" ||
-          &op.id == "vsc.withdraw" ||
-          &op.id == "vsc.consensus_stake" ||
-          &op.id == "vsc.consensus_unstake" ||
-          &op.id == "vsc.stake_hbd" ||
-          &op.id == "vsc.unstake_hbd"
-        {
-          let tx_out = ctx.db.tx_pool
-            .find_one(doc! { "id": &trx_id, "anchr_opidx": i as i64 }).await
-            .map_err(|e| RespErr::DbErr { msg: e.to_string() })?;
-          result.push(Some(serde_json::to_value(tx_out).unwrap()));
         } else if &op.id == "vsc.create_contract" {
           let contract = ctx.db.contracts
             .find_one(doc! { "tx_id": &trx_id }).await
