@@ -1,6 +1,8 @@
-use crate::{ mongo::MongoDB, types::vsc::{ LedgerBalance, WitnessStat, Witnesses } };
+use crate::{ mongo::MongoDB, types::{ hive::DgpAtBlock, vsc::{ ElectionMember, LedgerBalance, WitnessStat, Witnesses } } };
+use chrono::{ DateTime, NaiveDateTime, Utc };
 use serde::Serialize;
 use futures_util::StreamExt;
+use std::error::Error as Error2;
 use mongodb::{ bson::{ doc, Bson }, error::Error, options::FindOneOptions };
 
 #[derive(Clone, Serialize)]
@@ -108,4 +110,66 @@ pub async fn get_user_cons_unstaking(db: &MongoDB, user: String) -> Result<i64, 
       .map(|d| d.get_i64("totalAmount").unwrap_or(0))
       .unwrap_or(0)
   )
+}
+
+pub async fn get_members_at_l1_block(db: &MongoDB, height: i64) -> Result<(i64, Vec<ElectionMember>, i64), Error> {
+  let db = db.clone();
+  let opt = FindOneOptions::builder()
+    .sort(doc! { "block_height": -1 })
+    .build();
+  let epoch = db.elections.find_one(doc! { "block_height": {"$lt": height} }).with_options(opt).await?;
+  match epoch {
+    Some(e) => Ok((e.epoch, e.members, e.total_weight)),
+    None => Ok((-1, vec![], 0)),
+  }
+}
+
+pub async fn get_total_deposits(db: &MongoDB, asset: &str, start_block: u32, end_block: u32) -> Result<i64, Error> {
+  let mut cursor = db.ledger.aggregate(
+    vec![
+      doc! { "$match": {"t": "deposit", "asset": asset, "block_height": {"$gte": start_block, "$lt": end_block}} },
+      doc! { "$group": {"_id": Bson::Null, "total": {"$sum": "$amount"}} }
+    ]
+  ).await?;
+  Ok(
+    cursor
+      .next().await
+      .transpose()?
+      .map(|d| d.get_i64("total").unwrap_or(0))
+      .unwrap_or(0)
+  )
+}
+
+pub async fn get_total_withdrawals(db: &MongoDB, asset: &str, start_block: u32, end_block: u32) -> Result<i64, Error> {
+  let mut cursor = db.ledger_actions.aggregate(
+    vec![
+      doc! { "$match": {"type": "withdraw", "asset": asset, "block_height": {"$gte": start_block, "$lt": end_block}} },
+      doc! { "$group": {"_id": Bson::Null, "total": {"$sum": "$amount"}} }
+    ]
+  ).await?;
+  Ok(
+    cursor
+      .next().await
+      .transpose()?
+      .map(|d| d.get_i64("total").unwrap_or(0))
+      .unwrap_or(0)
+  )
+}
+
+pub async fn get_last_processed_block_ts(
+  db: &MongoDB,
+  http_client: &reqwest::Client,
+  rpc: String
+) -> Result<(u32, DateTime<Utc>), Box<dyn Error2 + Send + Sync>> {
+  let db = db.clone();
+  let http_client = http_client.clone();
+  let last_processed_block = db.l1_blocks
+    .find_one(doc! {}).await?
+    .map(|s| s.last_processed_block)
+    .unwrap_or(1);
+  let current_state = http_client
+    .get(format!("{}/hafah-api/global-state?block-num={}", rpc, last_processed_block.to_string()))
+    .send().await?;
+  let current_state = current_state.json::<DgpAtBlock>().await?;
+  Ok((current_state.block_num, NaiveDateTime::parse_from_str(&current_state.created_at, "%Y-%m-%dT%H:%M:%S")?.and_utc()))
 }

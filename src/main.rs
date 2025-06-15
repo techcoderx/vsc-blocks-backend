@@ -57,16 +57,7 @@ async fn main() -> std::io::Result<()> {
   compiler.notify();
   let http_client = reqwest::Client::new();
   if config.be_indexer.unwrap_or(false) {
-    let idxer = indexer::indexer::Indexer::init(
-      http_client.clone(),
-      db.blocks.clone(),
-      db.elections.clone(),
-      db.ledger.clone(),
-      db.ledger_actions.clone(),
-      db.indexer2.clone(),
-      db.witness_stats.clone(),
-      db.bridge_stats.clone()
-    );
+    let idxer = indexer::indexer::Indexer::init(&http_client, &db);
     idxer.start();
   }
   if config.discord.is_some() {
@@ -110,6 +101,7 @@ async fn main() -> std::io::Result<()> {
           .service(be_api::bridge_stats)
           .service(be_api::addr_stats)
           .service(be_api::search)
+          .service(be_api::network_stats)
       )
   })
     .bind((config.server.address.as_str(), config.server.port))?

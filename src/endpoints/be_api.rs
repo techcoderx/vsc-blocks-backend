@@ -1,12 +1,14 @@
 use actix_web::{ get, web, HttpResponse, Responder };
+use chrono::Utc;
 use futures_util::StreamExt;
 use mongodb::{ bson::doc, options::{ FindOptions } };
 use serde::Deserialize;
 use serde_json::{ json, Value };
-use std::cmp::{ min, max };
+use std::cmp::{ max, min };
 use crate::{
   config::config,
-  helpers::db::{ get_props, get_witness_stats },
+  constants::NETWORK_STATS_START_DATE,
+  helpers::{ datetime::parse_date_str, db::{ get_props, get_witness_stats } },
   types::{ hive::{ CustomJson, TxByHash }, server::{ Context, RespErr }, vsc::{ BridgeStats, UserStats, WitnessStat } },
 };
 
@@ -250,4 +252,35 @@ async fn search(path: web::Path<String>, ctx: web::Data<Context>) -> Result<Http
     return Ok(HttpResponse::Ok().json(json!({"type": "tx", "result": &query})));
   }
   Ok(HttpResponse::Ok().json(json!({"type": "", "result": ""})))
+}
+
+#[derive(Debug, Deserialize)]
+struct NetworkStatsOpts {
+  from: Option<String>,
+  to: Option<String>,
+}
+
+#[get("/network/stats/daily")]
+async fn network_stats(params: web::Query<NetworkStatsOpts>, ctx: web::Data<Context>) -> Result<HttpResponse, RespErr> {
+  let from_date = params.from
+    .clone()
+    .map(|d| parse_date_str(&d))
+    .unwrap_or(parse_date_str(NETWORK_STATS_START_DATE))
+    .map_err(|_| RespErr::BadRequest { msg: String::from("Invalid from date") })?;
+  let to_date = params.to
+    .clone()
+    .map(|d| parse_date_str(&d).map_err(|_| RespErr::BadRequest { msg: String::from("Invalid to date") }))
+    .unwrap_or(Ok(Utc::now()))?;
+  let opt = FindOptions::builder()
+    .sort(doc! { "_id": 1 })
+    .build();
+  let mut stats = ctx.db.network_stats
+    .find(doc! { "_id": { "$gte": bson::DateTime::from_chrono(from_date), "$lte": bson::DateTime::from_chrono(to_date) } })
+    .with_options(opt).await
+    .map_err(|_| RespErr::DbErr { msg: String::from("Failed to query network stats") })?;
+  let mut results = Vec::new();
+  while let Some(doc) = stats.next().await {
+    results.push(doc.map_err(|e| RespErr::DbErr { msg: e.to_string() })?);
+  }
+  Ok(HttpResponse::Ok().json(results))
 }

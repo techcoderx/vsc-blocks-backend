@@ -1,40 +1,30 @@
 use futures_util::StreamExt;
 use serde_json::{ Value, from_value };
 use tokio::{ time::{ sleep, Duration }, sync::RwLock };
-use mongodb::{ bson::doc, Collection };
+use mongodb::bson::doc;
 use reqwest;
 use log::{ error, info };
 use std::sync::Arc;
 use bv_decoder::BvWeights;
-use crate::{
-  config::config,
-  types::{ hive::{ CustomJson, TxByHash }, vsc::{ json_to_bson, ElectionResultRecord, IndexerState, Signature, WitnessStat } },
-};
+use crate::{ config::config, mongo::MongoDB, types::{ hive::{ CustomJson, TxByHash }, vsc::{ json_to_bson, Signature } } };
 
 #[derive(Clone)]
 pub struct ElectionIndexer {
   http_client: reqwest::Client,
-  elections_db: Collection<ElectionResultRecord>,
-  indexer2: Collection<IndexerState>,
-  witness_stats: Collection<WitnessStat>,
+  db: MongoDB,
   is_running: Arc<RwLock<bool>>,
 }
 
 impl ElectionIndexer {
-  pub fn init(
-    http_client: reqwest::Client,
-    elections_db: Collection<ElectionResultRecord>,
-    indexer2: Collection<IndexerState>,
-    witness_stats: Collection<WitnessStat>
-  ) -> ElectionIndexer {
-    return ElectionIndexer { http_client, elections_db, indexer2, witness_stats, is_running: Arc::new(RwLock::new(false)) };
+  pub fn init(http_client: &reqwest::Client, db: &MongoDB) -> ElectionIndexer {
+    return ElectionIndexer { http_client: http_client.clone(), db: db.clone(), is_running: Arc::new(RwLock::new(false)) };
   }
 
   pub fn start(&self) {
     let http_client = self.http_client.clone();
-    let election_db = self.elections_db.clone();
-    let indexer2 = self.indexer2.clone();
-    let witness_stats = self.witness_stats.clone();
+    let election_db = self.db.elections.clone();
+    let indexer2 = self.db.indexer2.clone();
+    let witness_stats = self.db.witness_stats.clone();
     let running = Arc::clone(&self.is_running);
 
     tokio::spawn(async move {

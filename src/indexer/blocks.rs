@@ -1,53 +1,35 @@
 use futures_util::StreamExt;
 use serde_json::Value;
 use tokio::{ time::{ sleep, Duration }, sync::RwLock };
-use mongodb::{ bson::{ doc, Bson }, options::FindOneOptions, Collection };
+use mongodb::{ bson::{ doc, Bson }, options::FindOneOptions };
 use reqwest;
 use log::{ error, info };
 use std::sync::Arc;
 use bv_decoder::BvWeights;
-use crate::{
-  config::config,
-  types::{
-    hive::{ CustomJson, TxByHash },
-    vsc::{ json_to_bson, BlockHeaderRecord, ElectionResultRecord, EpochBlocksInfo, IndexerState, WitnessStat },
-  },
-};
+use crate::{ config::config, mongo::MongoDB, types::{ hive::{ CustomJson, TxByHash }, vsc::{ json_to_bson, EpochBlocksInfo } } };
 
 #[derive(Clone)]
 pub struct BlockIndexer {
   http_client: reqwest::Client,
-  blocks_db: Collection<BlockHeaderRecord>,
-  elections_db: Collection<ElectionResultRecord>,
-  indexer2: Collection<IndexerState>,
-  witness_stats: Collection<WitnessStat>,
+  db: MongoDB,
   is_running: Arc<RwLock<bool>>,
 }
 
 impl BlockIndexer {
-  pub fn init(
-    http_client: reqwest::Client,
-    blocks_db: Collection<BlockHeaderRecord>,
-    elections_db: Collection<ElectionResultRecord>,
-    indexer2: Collection<IndexerState>,
-    witness_stats: Collection<WitnessStat>
-  ) -> BlockIndexer {
+  pub fn init(http_client: &reqwest::Client, db: &MongoDB) -> BlockIndexer {
     return BlockIndexer {
-      http_client,
-      blocks_db,
-      elections_db,
-      indexer2,
-      witness_stats,
+      http_client: http_client.clone(),
+      db: db.clone(),
       is_running: Arc::new(RwLock::new(false)),
     };
   }
 
   pub fn start(&self) {
     let http_client = self.http_client.clone();
-    let blocks_db = self.blocks_db.clone();
-    let election_db = self.elections_db.clone();
-    let indexer2 = self.indexer2.clone();
-    let witness_stats = self.witness_stats.clone();
+    let blocks_db = self.db.blocks.clone();
+    let election_db = self.db.elections.clone();
+    let indexer2 = self.db.indexer2.clone();
+    let witness_stats = self.db.witness_stats.clone();
     let running = Arc::clone(&self.is_running);
 
     tokio::spawn(async move {

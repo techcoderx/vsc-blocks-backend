@@ -8,6 +8,7 @@ use crate::types::{
     BlockHeaderRecord,
     BridgeStats,
     Contract,
+    DailyStats,
     ElectionResultRecord,
     HiveBlocksSyncState,
     IndexerState,
@@ -32,6 +33,7 @@ pub struct MongoDB {
   pub ledger_actions: Collection<LedgerActions>,
   pub ledger: Collection<Ledger>,
   pub ledger_bal: Collection<LedgerBalance>,
+  pub network_stats: Collection<DailyStats>,
 
   // be-api additional data
   pub indexer2: Collection<IndexerState>,
@@ -65,6 +67,7 @@ impl MongoDB {
       indexer2: db2.collection("indexer_state"),
       witness_stats: db2.collection("witness_stats"),
       bridge_stats: db2.collection("bridge_stats"),
+      network_stats: db2.collection("network_stats"),
       cv_contracts: db3.collection("contracts"),
       cv_source_codes: db3.collection("source_code"),
       cv_licenses: db3.collection("licenses"),

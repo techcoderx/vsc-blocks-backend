@@ -1,3 +1,4 @@
+use bson::DateTime;
 use serde::{ Serialize, Deserialize };
 use serde_json::Value;
 use mongodb::bson;
@@ -12,6 +13,7 @@ pub struct IndexerState {
   pub l1_height: u32,
   pub l2_height: u32,
   pub epoch: i32,
+  pub network_stats_date: DateTime,
 }
 
 #[derive(Clone, Serialize, Deserialize)]
@@ -138,7 +140,7 @@ pub struct ElectionResultRecord {
   pub members: Vec<ElectionMember>,
   pub weights: Vec<u64>,
   pub protocol_version: u64,
-  pub total_weight: u64,
+  pub total_weight: i64,
   pub block_height: u64,
   pub proposer: String,
   pub tx_id: String,
@@ -230,6 +232,27 @@ pub struct UserStats {
   pub ledger_actions: u64,
   pub deposits: u64,
   pub withdrawals: u64,
+}
+
+#[derive(Clone, Serialize, Deserialize)]
+pub struct DailyStats {
+  #[serde(rename = "_id")]
+  pub date: DateTime,
+  pub txs: u64,
+  pub ledger_txs: u64,
+  pub ledger_actions: u64,
+  pub deposits: u32,
+  pub deposits_hive: u64,
+  pub deposits_hbd: u64,
+  pub withdrawals: u32,
+  pub withdrawals_hive: u64,
+  pub withdrawals_hbd: u64,
+  pub blocks: u32,
+  pub witnesses: u32,
+  pub contracts: u32,
+  pub active_stake: u64,
+  pub active_l1_addresses: u32,
+  pub active_l2_addresses: u32,
 }
 
 pub fn json_to_bson(option_json: Option<&Value>) -> bson::Bson {

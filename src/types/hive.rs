@@ -11,8 +11,9 @@ pub struct JsonRpcResp {
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct DgpAtBlock {
-  pub block_num: u64,
+  pub block_num: u32,
   pub hash: String,
+  pub created_at: String,
 }
 
 #[derive(Clone, Debug, Deserialize)]

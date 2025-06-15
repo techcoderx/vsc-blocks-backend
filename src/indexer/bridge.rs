@@ -1,29 +1,23 @@
 use log::info;
-use mongodb::{ bson::doc, Collection };
+use mongodb::bson::doc;
 use tokio::time::sleep;
 use std::time::Duration;
-use crate::{ constants::BRIDGE_TXS_TALLY_INTERVAL, types::vsc::{ BridgeStats, Ledger, LedgerActions } };
+use crate::{ constants::BRIDGE_TXS_TALLY_INTERVAL, mongo::MongoDB };
 
 #[derive(Clone)]
 pub struct BridgeStatsIndexer {
-  ledger: Collection<Ledger>,
-  ledger_actions: Collection<LedgerActions>,
-  bridge_stats: Collection<BridgeStats>,
+  db: MongoDB,
 }
 
 impl BridgeStatsIndexer {
-  pub fn init(
-    ledger: Collection<Ledger>,
-    ledger_actions: Collection<LedgerActions>,
-    bridge_stats: Collection<BridgeStats>
-  ) -> BridgeStatsIndexer {
-    return BridgeStatsIndexer { ledger, ledger_actions, bridge_stats };
+  pub fn init(db: &MongoDB) -> BridgeStatsIndexer {
+    return BridgeStatsIndexer { db: db.clone() };
   }
 
   pub fn start(&self) {
-    let ledger = self.ledger.clone();
-    let ledger_actions = self.ledger_actions.clone();
-    let bridge_stats = self.bridge_stats.clone();
+    let ledger = self.db.ledger.clone();
+    let ledger_actions = self.db.ledger_actions.clone();
+    let bridge_stats = self.db.bridge_stats.clone();
 
     tokio::spawn(async move {
       info!("Begin indexing bridge stats every {} seconds", BRIDGE_TXS_TALLY_INTERVAL);
