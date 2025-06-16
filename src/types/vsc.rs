@@ -239,8 +239,8 @@ pub struct DailyStats {
   #[serde(rename = "_id")]
   pub date: DateTime,
   pub txs: u64,
-  pub ledger_txs: u64,
-  pub ledger_actions: u64,
+  // pub ledger_txs: u64,
+  // pub ledger_actions: u64,
   pub deposits: u32,
   pub deposits_hive: u64,
   pub deposits_hbd: u64,
