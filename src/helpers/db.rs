@@ -127,7 +127,7 @@ pub async fn get_members_at_l1_block(db: &MongoDB, height: i64) -> Result<(i64, 
 pub async fn get_total_deposits(db: &MongoDB, asset: &str, start_block: u32, end_block: u32) -> Result<i64, Error> {
   let mut cursor = db.ledger.aggregate(
     vec![
-      doc! { "$match": {"t": "deposit", "asset": asset, "block_height": {"$gte": start_block, "$lt": end_block}} },
+      doc! { "$match": {"t": "deposit", "tk": asset, "block_height": {"$gte": start_block, "$lt": end_block}} },
       doc! { "$group": {"_id": Bson::Null, "total": {"$sum": "$amount"}} }
     ]
   ).await?;
