@@ -61,7 +61,7 @@ async fn main() -> std::io::Result<()> {
     idxer.start();
   }
   if config.discord.is_some() {
-    let discord_bot = chatbot::discord::DiscordBot::init(&config.discord.clone().unwrap(), &db);
+    let discord_bot = chatbot::discord::DiscordBot::init(&config.discord.clone().unwrap(), &db, &http_client);
     discord_bot.start();
   }
   let server_ctx = Context { db, compiler, http_client: http_client.clone() };

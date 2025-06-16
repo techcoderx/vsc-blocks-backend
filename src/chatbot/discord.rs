@@ -1,7 +1,7 @@
-use std::ops::Div;
+use std::ops::{ Div, Sub };
 
 use crate::{
-  config::DiscordConf,
+  config::{ config, DiscordConf },
   constants::{ L1_EXPLORER_URL, VSC_BLOCKS_HOME },
   helpers::db::{ get_props, get_user_balance, get_user_cons_unstaking, get_witness, get_witness_stats },
   mongo::MongoDB,
@@ -12,9 +12,11 @@ use formatter::thousand_separator;
 use mongodb::bson::doc;
 use tokio;
 use poise::{ serenity_prelude::{ self, CreateEmbed, Timestamp }, CreateReply };
+use vsc_blocks_backend::types::hive::DgpAtBlock;
 
 struct Data {
   pub db: MongoDB,
+  pub http_client: reqwest::Client,
 } // User data, which is stored and accessible in all command invocations
 type Error = Box<dyn std::error::Error + Send + Sync>;
 type Context<'a> = poise::Context<'a, Data, Error>;
@@ -74,7 +76,7 @@ async fn witness(
       vec![
         ("Username", username, true),
         ("Enabled", wit.enabled.to_string(), true),
-        ("Last Update", time(wit.ts.clone(), 'R'), true),
+        ("Last Update", time(wit.ts.clone(), 'f'), true),
         ("Blocks Produced", thousand_separator(stats.block_count.unwrap_or(0)), true),
         ("Elections Held", thousand_separator(stats.election_count.unwrap_or(0)), true),
         (
@@ -127,7 +129,7 @@ async fn epoch(ctx: Context<'_>, #[description = "VSC epoch number"] #[min = 0] 
           "Timestamp",
           epoch.be_info
             .clone()
-            .map(|d| time(d.ts, 'R'))
+            .map(|d| time(d.ts, 'f'))
             .unwrap_or(String::from("*Indexing...*")),
           true,
         ),
@@ -178,7 +180,7 @@ async fn block(ctx: Context<'_>, #[description = "VSC block number"] #[min = 1] 
     .fields(
       vec![
         ("Block Number", thousand_separator(block_num), true),
-        ("Timestamp", time(block.ts.clone(), 'R'), true),
+        ("Timestamp", time(block.ts.clone(), 'f'), true),
         (
           "Slot Height",
           format!("[{}]({}/b/{})", thousand_separator(block.slot_height), L1_EXPLORER_URL, block.slot_height),
@@ -238,25 +240,75 @@ async fn balance(
   Ok(())
 }
 
+#[poise::command(slash_command, name_localized("en-US", "tx"), description_localized("en-US", "Retrieve a VSC transaction"))]
+async fn tx(
+  ctx: Context<'_>,
+  #[description = "Transaction ID"] #[min_length = 40] #[max_length = 100] tx_id: String
+) -> Result<(), Error> {
+  ctx.defer().await?;
+  let trx = ctx.data().db.tx_pool.find_one(doc! { "id": &tx_id }).await?;
+  if trx.is_none() {
+    ctx.reply(format!("Transaction {} does not exist.", tx_id)).await?;
+    return Ok(());
+  }
+  let trx = trx.unwrap();
+  let status_text = match trx.status.as_str() {
+    "PENDING" => "Pending :hourglass_flowing_sand:",
+    "INCLUDED" => "Included :hourglass_flowing_sand:",
+    "CONFIRMED" => "Confirmed :white_check_mark:",
+    "FAILED" => "Failed :x:",
+    _ => ":thinking: Unknown",
+  };
+  let signers_text = match trx.required_auths.len() {
+    0 => String::from("*None*"),
+    1 => trx.required_auths[0].clone(),
+    _ => format!("{} *(+{})*", trx.required_auths[0], trx.required_auths.len().sub(1)),
+  };
+  let dgp_req = ctx
+    .data()
+    .http_client.get(format!("{}/hafah-api/global-state?block-num={}", config.hive_rpc, trx.anchored_height))
+    .send().await?;
+  let dgp = dgp_req.json::<DgpAtBlock>().await?;
+  let embed = CreateEmbed::new()
+    .title("VSC Transaction")
+    .url(format!("{}/tx/{}", VSC_BLOCKS_HOME, tx_id))
+    .fields(
+      vec![
+        ("Transaction ID", tx_id, false),
+        ("Timestamp", time(dgp.created_at.clone(), 'f'), true),
+        ("L1 Block", thousand_separator(trx.anchored_height), true),
+        ("Position In Block", thousand_separator(trx.anchored_index), true),
+        ("Signers", signers_text, true),
+        ("Status", String::from(status_text), true)
+      ]
+    )
+    .timestamp(Timestamp::now());
+  let reply = CreateReply::default().embed(embed);
+  ctx.send(reply).await?;
+  Ok(())
+}
+
 #[derive(Clone)]
 pub struct DiscordBot {
   pub conf: DiscordConf,
   pub db: MongoDB,
+  pub http_client: reqwest::Client,
 }
 
 impl DiscordBot {
-  pub fn init(conf: &DiscordConf, db: &MongoDB) -> DiscordBot {
-    return DiscordBot { conf: conf.clone(), db: db.clone() };
+  pub fn init(conf: &DiscordConf, db: &MongoDB, http_client: &reqwest::Client) -> DiscordBot {
+    return DiscordBot { conf: conf.clone(), db: db.clone(), http_client: http_client.clone() };
   }
 
   pub fn start(&self) {
     let token = self.conf.token.clone();
     let intents = serenity_prelude::GatewayIntents::non_privileged();
     let db = self.db.clone();
+    let http_client = self.http_client.clone();
     let framework = poise::Framework
       ::builder()
       .options(poise::FrameworkOptions {
-        commands: vec![stats(), witness(), epoch(), block(), balance()],
+        commands: vec![stats(), witness(), epoch(), block(), balance(), tx()],
         ..Default::default()
       })
       .setup(|ctx, _ready, framework| {
@@ -269,7 +321,7 @@ impl DiscordBot {
           //   http.delete_global_command(cmd.id.into()).await?;
           // }
           poise::builtins::register_globally(ctx, &framework.options().commands).await?;
-          Ok(Data { db })
+          Ok(Data { db, http_client })
         })
       })
       .build();
