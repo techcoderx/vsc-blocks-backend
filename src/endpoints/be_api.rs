@@ -1,7 +1,7 @@
 use actix_web::{ get, web, HttpResponse, Responder };
 use chrono::Utc;
 use futures_util::StreamExt;
-use mongodb::{ bson::doc, options::{ FindOptions } };
+use mongodb::{ bson::doc, options::{ FindOneOptions, FindOptions } };
 use serde::Deserialize;
 use serde_json::{ json, Value };
 use std::cmp::{ max, min };
@@ -43,6 +43,28 @@ async fn get_witness_stats_many(path: web::Path<String>, ctx: web::Data<Context>
   let mut stats: Vec<WitnessStat> = Vec::new();
   for user in users {
     stats.push(get_witness_stats(&ctx.db, String::from(user)).await.map_err(|e| RespErr::DbErr { msg: e.to_string() })?);
+  }
+  Ok(HttpResponse::Ok().json(stats))
+}
+
+#[get("/witnesses/stats")]
+async fn get_active_witness_stats(ctx: web::Data<Context>) -> Result<HttpResponse, RespErr> {
+  let ep_opt = FindOneOptions::builder()
+    .sort(doc! { "epoch": -1 })
+    .build();
+  let epoch = ctx.db.elections
+    .find_one(doc! {})
+    .with_options(ep_opt).await
+    .map_err(|e| RespErr::DbErr { msg: e.to_string() })?;
+  let epoch = match epoch {
+    Some(e) => e,
+    None => {
+      return Err(RespErr::BadRequest { msg: String::from("There are no elections in the db yet") });
+    }
+  };
+  let mut stats: Vec<WitnessStat> = Vec::new();
+  for user in epoch.members {
+    stats.push(get_witness_stats(&ctx.db, user.account).await.map_err(|e| RespErr::DbErr { msg: e.to_string() })?);
   }
   Ok(HttpResponse::Ok().json(stats))
 }

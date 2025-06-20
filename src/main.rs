@@ -93,6 +93,7 @@ async fn main() -> std::io::Result<()> {
           .service(be_api::props)
           .service(be_api::witness_stats)
           .service(be_api::get_witness_stats_many)
+          .service(be_api::get_active_witness_stats)
           .service(be_api::list_epochs)
           .service(be_api::get_epoch)
           .service(be_api::list_blocks)
