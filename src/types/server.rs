@@ -1,11 +1,11 @@
 use actix_web::{ http::{ header::ContentType, StatusCode }, HttpResponse };
 use derive_more::derive::{ Display, Error };
-use serde_json::json;
+use serde::Serialize;
 use reqwest;
+use utoipa::{ ToResponse, ToSchema };
 use log::error;
 use std::fmt;
-use crate::mongo::MongoDB;
-use crate::compiler::Compiler;
+use crate::{ compiler::Compiler, mongo::MongoDB };
 
 #[derive(Display, Error)]
 pub enum RespErr {
@@ -44,9 +44,7 @@ impl actix_web::error::ResponseError for RespErr {
     if e.len() > 0 {
       error!("{}", e);
     }
-    HttpResponse::build(self.status_code())
-      .insert_header(ContentType::json())
-      .json(json!({ "error": self.to_string() }))
+    HttpResponse::build(self.status_code()).insert_header(ContentType::json()).json(ErrorRes { error: self.to_string() })
   }
 
   fn status_code(&self) -> StatusCode {
@@ -72,4 +70,14 @@ pub struct Context {
   pub db: MongoDB,
   pub compiler: Compiler,
   pub http_client: reqwest::Client,
+}
+
+#[derive(Serialize, ToSchema, ToResponse)]
+pub struct SuccessRes {
+  pub success: bool,
+}
+
+#[derive(Serialize, ToSchema, ToResponse)]
+pub struct ErrorRes {
+  error: String,
 }

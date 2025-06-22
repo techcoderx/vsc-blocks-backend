@@ -1,5 +1,6 @@
 use serde::{ Deserialize, Serialize };
 use serde_json::Value;
+use utoipa::{ ToResponse, ToSchema };
 use mongodb::bson::DateTime;
 use std::fmt;
 
@@ -52,5 +53,41 @@ pub struct CVContractCode {
   pub addr: String,
   pub fname: String,
   pub is_lockfile: bool,
+  pub content: String,
+}
+
+#[derive(Clone, Serialize, ToResponse, ToSchema)]
+pub struct CVContractResult {
+  /// Contract address
+  pub address: String,
+  /// Contract bytecode CID
+  pub code: String,
+  /// Username that submitted the contract source code
+  pub username: Option<String>,
+  /// Contract verification request timestamp
+  pub request_ts: String,
+  /// Contract verification completion timestamp
+  pub verified_ts: Option<String>,
+  /// Contract verification status (pending, queued, in progress, success, failed, not match)
+  pub status: String,
+  /// Contract public exports
+  pub exports: Option<Vec<String>>,
+  /// List of source code filenames for the contract
+  pub files: Vec<String>,
+  /// Filename of the lockfile (if any)
+  pub lockfile: Option<String>,
+  /// SPDX identifier of contract source code license as listed in https://spdx.org/licenses
+  pub license: String,
+  /// Language of contract source code
+  pub lang: String,
+  /// Contract dependencies
+  pub dependencies: Option<Value>,
+}
+
+#[derive(Clone, Serialize, ToResponse, ToSchema)]
+pub struct CVContractCatFile {
+  /// Filename of source code
+  pub name: String,
+  /// Content of source code file
   pub content: String,
 }
