@@ -9,7 +9,11 @@ use crate::{
   config::config,
   constants::NETWORK_STATS_START_DATE,
   helpers::{ datetime::parse_date_str, db::{ get_props, get_witness_stats } },
-  types::{ hive::{ CustomJson, TxByHash }, server::{ Context, RespErr }, vsc::{ BridgeStats, UserStats, WitnessStat } },
+  types::{
+    hive::{ CustomJson, TxByHash },
+    server::{ Context, RespErr },
+    vsc::{ BridgeStats, UserStats, WitnessStat, WitnessStatResult },
+  },
 };
 
 #[get("")]
@@ -62,9 +66,20 @@ async fn get_active_witness_stats(ctx: web::Data<Context>) -> Result<HttpRespons
       return Err(RespErr::BadRequest { msg: String::from("There are no elections in the db yet") });
     }
   };
-  let mut stats: Vec<WitnessStat> = Vec::new();
-  for user in epoch.members {
-    stats.push(get_witness_stats(&ctx.db, user.account).await.map_err(|e| RespErr::DbErr { msg: e.to_string() })?);
+  let mut stats: Vec<WitnessStatResult> = Vec::new();
+  for i in 0..epoch.members.len() {
+    let stat = get_witness_stats(&ctx.db, epoch.members[i].account.clone()).await.map_err(|e| RespErr::DbErr {
+      msg: e.to_string(),
+    })?;
+    stats.push(WitnessStatResult {
+      proposer: stat.proposer,
+      block_count: stat.block_count,
+      election_count: stat.election_count,
+      last_block: stat.last_block,
+      last_epoch: stat.last_epoch,
+      weight: epoch.weights[i],
+      did_key: epoch.members[i].key.clone(),
+    });
   }
   Ok(HttpResponse::Ok().json(stats))
 }
