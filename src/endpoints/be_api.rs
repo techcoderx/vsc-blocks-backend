@@ -124,7 +124,15 @@ async fn get_epoch(path: web::Path<String>, ctx: web::Data<Context>) -> Result<H
     .into_inner()
     .parse::<i32>()
     .map_err(|_| RespErr::BadRequest { msg: String::from("Invalid epoch number") })?;
-  let epoch = ctx.db.elections.find_one(doc! { "epoch": epoch_num }).await.map_err(|e| RespErr::DbErr { msg: e.to_string() })?;
+  let epoch = (match epoch_num {
+    -1 => {
+      let ep_opt = FindOneOptions::builder()
+        .sort(doc! { "epoch": -1 })
+        .build();
+      ctx.db.elections.find_one(doc! {}).with_options(ep_opt)
+    }
+    _ => ctx.db.elections.find_one(doc! { "epoch": epoch_num }),
+  }).await.map_err(|e| RespErr::DbErr { msg: e.to_string() })?;
   match epoch {
     Some(ep) => Ok(HttpResponse::Ok().json(ep)),
     None => Ok(HttpResponse::NotFound().json(json!({"error": "Epoch does not exist"}))),
