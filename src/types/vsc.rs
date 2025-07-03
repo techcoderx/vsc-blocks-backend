@@ -224,7 +224,7 @@ pub struct TransactionRecord {
   pub anchored_height: u64,
   // #[serde(rename = "first_seen")]
   // pub first_seen: DateTime<Utc>,
-  pub op_types: Vec<String>,
+  // pub op_types: Vec<String>,
   pub output: Option<Output>,
   pub ledger: Vec<LedgerOpLog>,
 }
