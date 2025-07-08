@@ -264,6 +264,11 @@ async fn tx(
     1 => trx.required_auths[0].clone(),
     _ => format!("{} *(+{})*", trx.required_auths[0], trx.required_auths.len().sub(1)),
   };
+  let tx_type_text = match trx.ops.len() {
+    0 => String::from("*None*"),
+    1 => trx.ops[0].clone().r#type,
+    _ => String::from("*Multiple*"),
+  };
   let dgp_req = ctx
     .data()
     .http_client.get(format!("{}/hafah-api/global-state?block-num={}", config.hive_rpc, trx.anchored_height))
@@ -278,6 +283,7 @@ async fn tx(
         ("Timestamp", time(dgp.created_at.clone(), 'f'), true),
         ("L1 Block", thousand_separator(trx.anchored_height), true),
         ("Position In Block", thousand_separator(trx.anchored_index), true),
+        ("Type", tx_type_text, true),
         ("Signers", signers_text, true),
         ("Status", String::from(status_text), true)
       ]

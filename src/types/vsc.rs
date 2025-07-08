@@ -224,9 +224,15 @@ pub struct TransactionRecord {
   pub anchored_height: u64,
   // #[serde(rename = "first_seen")]
   // pub first_seen: DateTime<Utc>,
-  // pub op_types: Vec<String>,
+  pub ops: Vec<OpInfo>,
   pub output: Option<Output>,
   pub ledger: Vec<LedgerOpLog>,
+}
+
+#[derive(Clone, Serialize, Deserialize)]
+pub struct OpInfo {
+  #[serde(rename = "type")]
+  pub r#type: String,
 }
 
 #[derive(Clone, Serialize, Deserialize)]
