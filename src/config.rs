@@ -25,6 +25,11 @@ pub struct ServerConfig {
 }
 
 #[derive(Serialize, Deserialize, Clone)]
+pub struct CompilerConf {
+  pub enabled: Option<bool>,
+}
+
+#[derive(Serialize, Deserialize, Clone)]
 pub struct ASCompilerConf {
   pub image: String,
   pub src_dir: String,
@@ -52,6 +57,7 @@ pub struct TomlConfig {
   pub be_indexer: Option<bool>,
   pub auth: AuthConf,
   pub server: ServerConfig,
+  pub compiler: Option<CompilerConf>,
   pub ascompiler: ASCompilerConf,
   pub discord: Option<DiscordConf>,
 }
@@ -84,6 +90,7 @@ impl TomlConfig {
           key: Some(hex::encode(rand::rng().random::<[u8; 32]>())),
         },
         server: ServerConfig { address: String::from("127.0.0.1"), port: 8080 },
+        compiler: Some(CompilerConf { enabled: Some(false) }),
         ascompiler: ASCompilerConf {
           image: String::from("as-compiler"),
           src_dir: format!("{}/as_compiler", current_dir().unwrap().to_str().unwrap()),

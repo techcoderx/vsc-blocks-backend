@@ -53,8 +53,19 @@ async fn main() -> std::io::Result<()> {
       process::exit(1);
     }
   }
-  let compiler = compiler::Compiler::init(&db, config.ascompiler.clone());
-  compiler.notify();
+  let compiler = match
+    config.compiler
+      .clone()
+      .map(|f| f.enabled.unwrap_or(false))
+      .unwrap_or(false)
+  {
+    true => {
+      let c = compiler::Compiler::init(&db, config.ascompiler.clone());
+      c.notify();
+      Some(c)
+    }
+    false => None,
+  };
   let http_client = reqwest::Client::new();
   if config.be_indexer.unwrap_or(false) {
     let idxer = indexer::indexer::Indexer::init(&http_client, &db);

@@ -58,7 +58,7 @@ async fn test_e2e_verify_contract_assemblyscript() {
     .unwrap_or_else(|_| String::from("/Users/techcoderx/vsc-blocks-backend/as_compiler"));
   let compiler = Compiler::init(&db, ASCompilerConf { image: String::from("as-compiler"), src_dir: asc_dir, src_dir_host: None });
   compiler.notify();
-  let server_ctx = Context { db: db, compiler: compiler.clone(), http_client: http_client.clone() };
+  let server_ctx = Context { db: db, compiler: Some(compiler), http_client: http_client.clone() };
   let app = test::init_service(
     App::new()
       .wrap(NormalizePath::trim())

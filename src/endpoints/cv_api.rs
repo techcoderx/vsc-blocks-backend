@@ -381,7 +381,9 @@ async fn upload_complete(path: web::Path<String>, req: HttpRequest, ctx: web::Da
   ctx.db.cv_contracts
     .update_one(doc! { "_id": &address }, doc! { "$set": doc! {"status": CVStatus::Queued.to_string()} }).await
     .map_err(|e| RespErr::DbErr { msg: e.to_string() })?;
-  ctx.compiler.notify();
+  if ctx.compiler.is_some() {
+    ctx.compiler.clone().unwrap().notify();
+  }
   Ok(HttpResponse::Ok().json(SuccessRes { success: true }))
 }
 

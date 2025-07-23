@@ -68,7 +68,7 @@ impl actix_web::error::ResponseError for RespErr {
 #[derive(Clone)]
 pub struct Context {
   pub db: MongoDB,
-  pub compiler: Compiler,
+  pub compiler: Option<Compiler>,
   pub http_client: reqwest::Client,
 }
 
