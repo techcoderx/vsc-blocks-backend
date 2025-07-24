@@ -4,7 +4,7 @@ Backend server for [VSC Blocks](https://vsc.techcoderx.com). This is an extensio
 
 - Contract verifier
 - Network stats indexer
-- _(future)_ Chatbots
+- Discord bot
 
 ## Compile
 
