@@ -192,6 +192,9 @@ async fn verify_new(
   req_data: web::Json<ReqVerifyNew>,
   ctx: web::Data<Context>
 ) -> Result<HttpResponse, RespErr> {
+  if ctx.compiler.is_none() {
+    return Err(RespErr::CvDisabled);
+  }
   let username = verify_auth_token(&req)?;
   let address = path.into_inner();
   let contract = ctx.db.contracts.find_one(doc! { "id": &address }).await.map_err(|e| RespErr::DbErr { msg: e.to_string() })?;
@@ -303,6 +306,9 @@ pub async fn upload_file(
   MultipartForm(mut form): MultipartForm<VerifUploadForm>,
   ctx: web::Data<Context>
 ) -> Result<HttpResponse, RespErr> {
+  if ctx.compiler.is_none() {
+    return Err(RespErr::CvDisabled);
+  }
   verify_auth_token(&req)?;
   let address = path.into_inner();
   debug!("Uploaded file {} with size: {}", form.file.file_name.unwrap(), form.file.size);
@@ -360,6 +366,9 @@ pub async fn upload_file(
 )]
 #[post("/verify/{address}/complete")]
 async fn upload_complete(path: web::Path<String>, req: HttpRequest, ctx: web::Data<Context>) -> Result<HttpResponse, RespErr> {
+  if ctx.compiler.is_none() {
+    return Err(RespErr::CvDisabled);
+  }
   verify_auth_token(&req)?;
   let address = path.into_inner();
   match ctx.db.cv_contracts.find_one(doc! { "_id": &address }).await.map_err(|e| RespErr::DbErr { msg: e.to_string() })? {
