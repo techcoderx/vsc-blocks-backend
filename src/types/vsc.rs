@@ -106,8 +106,8 @@ pub struct WitnessStat {
 pub struct WitnessStatResult {
   #[serde(rename = "_id")]
   pub proposer: String,
-  pub block_count: Option<i32>,
-  pub election_count: Option<i32>,
+  pub block_count: i32,
+  pub election_count: i32,
   pub last_block: Option<i32>,
   pub last_epoch: Option<i32>,
   pub weight: u64,

@@ -73,8 +73,8 @@ async fn get_active_witness_stats(ctx: web::Data<Context>) -> Result<HttpRespons
     })?;
     stats.push(WitnessStatResult {
       proposer: stat.proposer,
-      block_count: stat.block_count,
-      election_count: stat.election_count,
+      block_count: stat.block_count.unwrap_or(0),
+      election_count: stat.election_count.unwrap_or(0),
       last_block: stat.last_block,
       last_epoch: stat.last_epoch,
       weight: epoch.weights[i],
