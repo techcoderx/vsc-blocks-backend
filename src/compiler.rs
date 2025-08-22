@@ -155,6 +155,7 @@ impl Compiler {
           error!("There are no files to compile");
           break 'mainloop;
         }
+        /*
         if &next_contract.lang == "assembly-script" {
           // assemblyscript
           let cont_name = "as-compiler";
@@ -244,6 +245,7 @@ impl Compiler {
           delete_dir_contents(fs::read_dir(format!("{}/src", compiler_dir)));
           delete_dir_contents(fs::read_dir(format!("{}/build", compiler_dir)));
         }
+        */
       }
       debug!("Closing compiler thread");
       *r = false;

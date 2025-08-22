@@ -1,5 +1,4 @@
 use serde::{ Deserialize, Serialize };
-use serde_json::Value;
 use utoipa::{ ToResponse, ToSchema };
 use mongodb::bson::DateTime;
 use std::fmt;
@@ -45,14 +44,12 @@ pub struct CVContract {
   pub exports: Option<Vec<String>>,
   pub license: String,
   pub lang: String,
-  pub dependencies: Option<Value>,
 }
 
 #[derive(Clone, Serialize, Deserialize)]
 pub struct CVContractCode {
   pub addr: String,
   pub fname: String,
-  pub is_lockfile: bool,
   pub content: String,
 }
 
@@ -80,8 +77,6 @@ pub struct CVContractResult {
   pub license: String,
   /// Language of contract source code
   pub lang: String,
-  /// Contract dependencies
-  pub dependencies: Option<Value>,
 }
 
 #[derive(Clone, Serialize, ToResponse, ToSchema)]

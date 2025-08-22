@@ -22,6 +22,8 @@ pub enum RespErr {
   #[display("Block hash does not match the corresponding block number")] SigBhNotMatch,
   #[display("Failed to generate access token")] TokenGenFail,
   #[display("Contract verifier is disabled")] CvDisabled,
+  #[display("Invalid filename")] CvInvalidFname,
+  #[display("File/folder name length must be between 1 to 30 characters")] CvInvalidFnameLen,
   #[display("{msg}")] InternalErr {
     msg: String,
   },
@@ -63,6 +65,8 @@ impl actix_web::error::ResponseError for RespErr {
       RespErr::InternalErr { .. } => StatusCode::INTERNAL_SERVER_ERROR,
       RespErr::BadRequest { .. } => StatusCode::BAD_REQUEST,
       RespErr::CvDisabled => StatusCode::IM_A_TEAPOT,
+      RespErr::CvInvalidFname => StatusCode::BAD_REQUEST,
+      RespErr::CvInvalidFnameLen => StatusCode::BAD_REQUEST,
     }
   }
 }

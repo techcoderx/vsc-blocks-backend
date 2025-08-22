@@ -4,7 +4,6 @@ use futures_util::StreamExt;
 use mongodb::bson::{ doc, DateTime };
 use serde::{ Serialize, Deserialize };
 use serde_json::{ json, Number, Value };
-use semver::VersionReq;
 use chrono::{ Utc, Duration };
 use regex::Regex;
 use hex;
@@ -15,7 +14,6 @@ use log::{ error, debug };
 use std::io::Read;
 use crate::{
   config::config,
-  constants::*,
   types::{
     cv::{ CVContract, CVContractCatFile, CVContractCode, CVContractResult, CVStatus },
     hive::{ DgpAtBlock, JsonRpcResp },
@@ -168,8 +166,6 @@ async fn login(payload: String, ctx: web::Data<Context>) -> Result<HttpResponse,
 struct ReqVerifyNew {
   /// SPDX identifier of contract source code license as listed in https://spdx.org/licenses
   license: String,
-  /// JSON (or its equivalent) value of contract dependencies
-  dependencies: Value,
 }
 
 #[utoipa::path(
@@ -221,42 +217,8 @@ async fn verify_new(
     None => (),
   }
 
-  // check required dependencies
-  match contract.runtime.value.as_str() {
-    "assembly-script" => {
-      if !req_data.dependencies.is_object() {
-        return Err(RespErr::BadRequest { msg: String::from("Dependencies must be an object") });
-      }
-      let test_utils = req_data.dependencies.get(ASC_TEST_UTILS_NAME);
-      let sdk = req_data.dependencies.get(ASC_SDK_NAME);
-      let assemblyscript = req_data.dependencies.get(ASC_NAME);
-      let assemblyscript_json = req_data.dependencies.get(ASC_JSON_NAME);
-      if test_utils.is_none() || sdk.is_none() || assemblyscript.is_none() || assemblyscript_json.is_none() {
-        return Err(RespErr::BadRequest {
-          msg: format!(
-            "The following dependencies are required: {}, {}, {}, {}",
-            ASC_TEST_UTILS_NAME,
-            ASC_SDK_NAME,
-            ASC_NAME,
-            ASC_JSON_NAME
-          ),
-        });
-      }
-      if let Value::Object(map) = &req_data.dependencies {
-        // Iterate over the keys and values in the map
-        for (key, val) in map.iter() {
-          if !val.is_string() {
-            return Err(RespErr::BadRequest { msg: String::from("Dependency versions must be strings") });
-          }
-          VersionReq::parse(val.as_str().unwrap()).map_err(|e| RespErr::BadRequest {
-            msg: format!("Invalid semver for dependency {}: {}", key, e.to_string()),
-          })?;
-        }
-      }
-    }
-    _ => {
-      return Err(RespErr::BadRequest { msg: String::from("Language is currently unsupported") });
-    }
+  if &contract.runtime.value != "go" {
+    return Err(RespErr::BadRequest { msg: String::from("Language is currently unsupported") });
   }
   // clear already uploaded source codes when the previous ones failed verification
   ctx.db.cv_source_codes.delete_many(doc! { "addr": &address }).await.map_err(|e| RespErr::DbErr { msg: e.to_string() })?;
@@ -271,7 +233,6 @@ async fn verify_new(
     exports: None,
     license: req_data.license.clone(),
     lang: contract.runtime.value.clone(),
-    dependencies: Some(req_data.dependencies.clone()),
   };
   ctx.db.cv_contracts.insert_one(new_cv).await.map_err(|e| RespErr::DbErr { msg: e.to_string() })?;
   Ok(HttpResponse::Ok().json(SuccessRes { success: true }))
@@ -327,17 +288,27 @@ pub async fn upload_file(
     }
   }
   let fname_regex = Regex::new(r"^[A-Za-z0-9._-]+$").expect("Invalid regex pattern");
-  if form.filename.0.len() > 50 {
-    return Err(RespErr::BadRequest { msg: String::from("Filename length must be less than 50 characters") });
-  } else if !fname_regex.is_match(&form.filename.0) {
-    return Err(RespErr::BadRequest { msg: String::from("Invalid filename") });
+  if form.filename.0.starts_with("/") {
+    return Err(RespErr::CvInvalidFname);
+  }
+  let fname_split: Vec<&str> = form.filename.0.split('/').collect();
+  if
+    fname_split.len() == 0 ||
+    (fname_split[0] != "go.mod" && fname_split[0] != "go.sum" && fname_split[0] != "sdk" && fname_split[0] != "contract")
+  {
+    return Err(RespErr::CvInvalidFname);
+  }
+  for fname in fname_split {
+    if fname.len() == 0 || fname.len() > 30 {
+      return Err(RespErr::CvInvalidFnameLen);
+    } else if fname.starts_with("..") || !fname_regex.is_match(fname) {
+      return Err(RespErr::CvInvalidFname);
+    }
   }
   match ctx.db.cv_contracts.find_one(doc! { "_id": &address }).await.map_err(|e| RespErr::DbErr { msg: e.to_string() })? {
     Some(cv) => {
       if cv.status != "pending" {
         return Err(RespErr::BadRequest { msg: format!("Status needs to be pending, it is currently {}", cv.status) });
-      } else if cv.lang == "assembly-script" && (&form.filename.0 == "pnpm-lock.yml" || &form.filename.0 == "pnpm-lock.yaml") {
-        return Err(RespErr::BadRequest { msg: String::from("pnpm-lock.yaml is a reserved filename for pnpm lock files.") });
       }
     }
     None => {
@@ -347,7 +318,6 @@ pub async fn upload_file(
   let new_file = CVContractCode {
     addr: address.clone(),
     fname: form.filename.0.clone(),
-    is_lockfile: false,
     content: contents.clone(),
   };
   ctx.db.cv_source_codes.insert_one(new_file).await.map_err(|e| RespErr::DbErr { msg: e.to_string() })?;
@@ -398,7 +368,7 @@ async fn upload_complete(path: web::Path<String>, req: HttpRequest, ctx: web::Da
 
 #[get("/languages")]
 async fn list_langs() -> Result<HttpResponse, RespErr> {
-  Ok(HttpResponse::Ok().json(vec!["assembly-script", "go"]))
+  Ok(HttpResponse::Ok().json(vec!["go"]))
 }
 
 #[get("/licenses")]
@@ -453,7 +423,6 @@ async fn contract_info(path: web::Path<String>, ctx: web::Data<Context>) -> Resu
     lockfile: lockfilename,
     license: contract.license.clone(),
     lang: contract.lang.clone(),
-    dependencies: contract.dependencies.clone(),
   };
   Ok(HttpResponse::Ok().json(result))
 }
