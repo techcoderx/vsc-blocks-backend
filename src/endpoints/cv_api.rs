@@ -199,6 +199,11 @@ async fn verify_new(
   }
   let contract = contract.unwrap();
 
+  // only creator or owner can request verification if authentication enabled
+  if config.auth.enabled && &username != &contract.creator && &username != &contract.owner {
+    return Err(RespErr::CvNotAuthorized);
+  }
+
   // license check
   let valid_license = ctx.db.cv_licenses
     .find_one(doc! { "name": &req_data.license }).await
@@ -210,8 +215,11 @@ async fn verify_new(
   // existing contract verification status check
   match ctx.db.cv_contracts.find_one(doc! { "_id": &address }).await.map_err(|e| RespErr::DbErr { msg: e.to_string() })? {
     Some(cv) => {
-      if cv.status != "pending" && cv.status != "failed" && cv.status != "not match" {
+      let is_fail = cv.status == "failed" || cv.status == "not match";
+      if cv.status != "pending" && !is_fail {
         return Err(RespErr::BadRequest { msg: String::from("Contract is already verified or being verified.") });
+      } else if is_fail && cv.request_ts.to_chrono() + Duration::hours(12) > Utc::now() {
+        return Err(RespErr::CvRetryLater);
       }
     }
     None => (),
@@ -270,7 +278,7 @@ pub async fn upload_file(
   if ctx.compiler.is_none() {
     return Err(RespErr::CvDisabled);
   }
-  verify_auth_token(&req)?;
+  let username = verify_auth_token(&req)?;
   let address = path.into_inner();
   debug!("Uploaded file {} with size: {}", form.file.file_name.unwrap(), form.file.size);
   debug!("Contract address {}, new filename: {}", &address, &form.filename.0);
@@ -309,6 +317,8 @@ pub async fn upload_file(
     Some(cv) => {
       if cv.status != "pending" {
         return Err(RespErr::BadRequest { msg: format!("Status needs to be pending, it is currently {}", cv.status) });
+      } else if config.auth.enabled && &username != &cv.username.unwrap_or(String::from("")) {
+        return Err(RespErr::CvNotAuthorized);
       }
     }
     None => {
@@ -339,12 +349,14 @@ async fn upload_complete(path: web::Path<String>, req: HttpRequest, ctx: web::Da
   if ctx.compiler.is_none() {
     return Err(RespErr::CvDisabled);
   }
-  verify_auth_token(&req)?;
+  let username = verify_auth_token(&req)?;
   let address = path.into_inner();
   match ctx.db.cv_contracts.find_one(doc! { "_id": &address }).await.map_err(|e| RespErr::DbErr { msg: e.to_string() })? {
     Some(cv) => {
       if cv.status != "pending" {
         return Err(RespErr::BadRequest { msg: String::from("Status is currently not pending upload") });
+      } else if config.auth.enabled && &username != &cv.username.unwrap_or(String::from("")) {
+        return Err(RespErr::CvNotAuthorized);
       }
     }
     None => {

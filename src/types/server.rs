@@ -22,8 +22,10 @@ pub enum RespErr {
   #[display("Block hash does not match the corresponding block number")] SigBhNotMatch,
   #[display("Failed to generate access token")] TokenGenFail,
   #[display("Contract verifier is disabled")] CvDisabled,
+  #[display("Only contract deployer or owner can request verification")] CvNotAuthorized,
   #[display("Invalid filename")] CvInvalidFname,
   #[display("File/folder name length must be between 1 to 30 characters")] CvInvalidFnameLen,
+  #[display("Verification retry is only allowed 12 hours after the previous request time")] CvRetryLater,
   #[display("{msg}")] InternalErr {
     msg: String,
   },
@@ -65,8 +67,10 @@ impl actix_web::error::ResponseError for RespErr {
       RespErr::InternalErr { .. } => StatusCode::INTERNAL_SERVER_ERROR,
       RespErr::BadRequest { .. } => StatusCode::BAD_REQUEST,
       RespErr::CvDisabled => StatusCode::IM_A_TEAPOT,
+      RespErr::CvNotAuthorized => StatusCode::FORBIDDEN,
       RespErr::CvInvalidFname => StatusCode::BAD_REQUEST,
       RespErr::CvInvalidFnameLen => StatusCode::BAD_REQUEST,
+      RespErr::CvRetryLater => StatusCode::TOO_MANY_REQUESTS,
     }
   }
 }
