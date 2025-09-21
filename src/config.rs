@@ -30,10 +30,9 @@ pub struct CompilerConf {
 }
 
 #[derive(Serialize, Deserialize, Clone)]
-pub struct ASCompilerConf {
-  pub image: String,
+pub struct GoCompilerConf {
   pub src_dir: String,
-  pub src_dir_host: Option<String>,
+  pub timeout: usize,
 }
 
 #[derive(Serialize, Deserialize)]
@@ -58,7 +57,7 @@ pub struct TomlConfig {
   pub auth: AuthConf,
   pub server: ServerConfig,
   pub compiler: Option<CompilerConf>,
-  pub ascompiler: ASCompilerConf,
+  pub gocompiler: GoCompilerConf,
   pub discord: Option<DiscordConf>,
 }
 
@@ -91,10 +90,9 @@ impl TomlConfig {
         },
         server: ServerConfig { address: String::from("127.0.0.1"), port: 8080 },
         compiler: Some(CompilerConf { enabled: Some(false) }),
-        ascompiler: ASCompilerConf {
-          image: String::from("as-compiler"),
-          src_dir: format!("{}/as_compiler", current_dir().unwrap().to_str().unwrap()),
-          src_dir_host: None,
+        gocompiler: GoCompilerConf {
+          src_dir: format!("{}/go_compiler", current_dir().unwrap().to_str().unwrap()),
+          timeout: 10,
         },
         discord: None,
       };

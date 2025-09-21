@@ -88,14 +88,7 @@ async fn main() -> std::io::Result<()> {
           .service(cv_api::hello)
           .service(cv_api::login)
           .service(cv_api::verify_new)
-          .service(cv_api::upload_file)
-          .service(cv_api::upload_complete)
-          .service(cv_api::list_langs)
-          .service(cv_api::list_licenses)
           .service(cv_api::contract_info)
-          .service(cv_api::contract_files_ls)
-          .service(cv_api::contract_files_cat)
-          .service(cv_api::contract_files_cat_all)
       )
       .service(
         web

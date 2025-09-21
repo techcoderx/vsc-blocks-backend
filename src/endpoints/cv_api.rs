@@ -1,21 +1,18 @@
 use actix_web::{ get, post, web, HttpRequest, HttpResponse, Responder };
-use actix_multipart::form::{ tempfile::TempFile, MultipartForm, text::Text };
-use futures_util::StreamExt;
 use mongodb::bson::{ doc, DateTime };
 use serde::{ Serialize, Deserialize };
 use serde_json::{ json, Number, Value };
 use chrono::{ Utc, Duration };
 use regex::Regex;
 use hex;
-use sha2::{ Sha256, Digest };
+use sha2::{ digest::consts::False, Digest, Sha256 };
 use jsonwebtoken::{ Header, EncodingKey, DecodingKey, Algorithm, Validation, errors::ErrorKind };
 use utoipa::{ OpenApi, ToSchema };
-use log::{ error, debug };
-use std::io::Read;
+use log::debug;
 use crate::{
   config::config,
   types::{
-    cv::{ CVContract, CVContractCatFile, CVContractCode, CVContractResult, CVStatus },
+    cv::{ CVContract, CVContractResult, CVStatus, tinygo_versions },
     hive::{ DgpAtBlock, JsonRpcResp },
     server::{ Context, ErrorRes, RespErr, SuccessRes },
   },
@@ -164,19 +161,26 @@ async fn login(payload: String, ctx: web::Data<Context>) -> Result<HttpResponse,
 
 #[derive(Serialize, Deserialize, ToSchema)]
 struct ReqVerifyNew {
-  /// SPDX identifier of contract source code license as listed in https://spdx.org/licenses
-  license: String,
+  /// Link to GitHub repository
+  repo_url: String,
+  /// Branch or tag that should be checked out. Default branch will be used if not specified.
+  repo_branch: Option<String>,
+  /// Tinygo version
+  tinygo_version: String,
+  /// Tool used to strip output WASM file.
+  strip_tool: Option<String>,
 }
 
 #[utoipa::path(
   post,
   path = "/verify/{address}/new",
   summary = "Create a new contract verification request",
-  description = "Create a new contract verification request. This updates `license` and `dependencies` if the contract verification is already pending upload.\n\nNeeds to be called first to contracts that have never been verified or have failed verification previously.",
+  description = "Create a new contract verification request from a GitHub repository.",
   responses(
     (status = 200, description = "Contract verification request created successfully", body = SuccessRes),
+    (status = 302, description = "Another contract with exact bytecode was already verified", body = ErrorRes),
     (status = 400, description = "Failed to create contract verification request", body = ErrorRes),
-    (status = 404, description = "Contract does not exist", body = ErrorRes)
+    (status = 404, description = "Contract or GitHub repository does not exist", body = ErrorRes)
   ),
   params(("address" = String, Path, description = "Contract address to verify")),
   request_body = ReqVerifyNew
@@ -188,28 +192,20 @@ async fn verify_new(
   req_data: web::Json<ReqVerifyNew>,
   ctx: web::Data<Context>
 ) -> Result<HttpResponse, RespErr> {
-  if ctx.compiler.is_none() {
-    return Err(RespErr::CvDisabled);
-  }
+  // if ctx.compiler.is_none() {
+  //   return Err(RespErr::CvDisabled);
+  // }
   let username = verify_auth_token(&req)?;
   let address = path.into_inner();
   let contract = ctx.db.contracts.find_one(doc! { "id": &address }).await.map_err(|e| RespErr::DbErr { msg: e.to_string() })?;
   if contract.is_none() {
-    return Ok(HttpResponse::NotFound().json(json!({"error": "contract not found"})));
+    return Err(RespErr::ContractNotFound);
   }
   let contract = contract.unwrap();
 
   // only creator or owner can request verification if authentication enabled
   if config.auth.enabled && &username != &contract.creator && &username != &contract.owner {
     return Err(RespErr::CvNotAuthorized);
-  }
-
-  // license check
-  let valid_license = ctx.db.cv_licenses
-    .find_one(doc! { "name": &req_data.license }).await
-    .map_err(|e| RespErr::DbErr { msg: e.to_string() })?;
-  if valid_license.is_none() {
-    return Err(RespErr::BadRequest { msg: format!("License {} is not supported.", &req_data.license) });
   }
 
   // existing contract verification status check
@@ -224,173 +220,69 @@ async fn verify_new(
     }
     None => (),
   }
+  // other contracts identical bytecode that have been previously verified
+  match ctx.db.cv_contracts.find_one(doc! { "code": &contract.code }).await.map_err(|e| RespErr::DbErr { msg: e.to_string() })? {
+    Some(similar) => {
+      if similar.status == CVStatus::Success.to_string() {
+        return Err(RespErr::CvSimilarMatch);
+      }
+    }
+    None => (),
+  }
 
   if &contract.runtime.value != "go" {
     return Err(RespErr::BadRequest { msg: String::from("Language is currently unsupported") });
   }
-  // clear already uploaded source codes when the previous ones failed verification
-  ctx.db.cv_source_codes.delete_many(doc! { "addr": &address }).await.map_err(|e| RespErr::DbErr { msg: e.to_string() })?;
+  let repo_url = req_data.repo_url.clone();
+  if !repo_url.starts_with("https://github.com/") {
+    return Err(RespErr::CvInvalidGitHubURL);
+  }
+  let repo = repo_url.replace("https://github.com/", "");
+  let repo_id = repo.split("/").collect::<Vec<&str>>();
+  let repo_branch = req_data.repo_branch.clone().unwrap_or(format!(""));
+  if repo_id.len() != 2 || repo_id[0].len() > 39 || repo_id[1].len() > 100 {
+    return Err(RespErr::CvInvalidGitHubURL);
+  }
+  let github_user_regex: Regex = Regex::new(r"^[A-Za-z0-9-]+$").expect("Invalid regex pattern");
+  let github_repo_regex: Regex = Regex::new(r"^[A-Za-z0-9._-]+$").expect("Invalid regex pattern");
+  if !github_user_regex.is_match(repo_id[0]) || !github_repo_regex.is_match(repo_id[1]) {
+    return Err(RespErr::CvInvalidGitHubURL);
+  }
+  if repo_branch.len() > 255 {
+    return Err(RespErr::CvInvalidGitBranch);
+  }
+  match req_data.strip_tool.clone() {
+    Some(tool) => {
+      if &tool != "wabt" && &tool != "wasm-tools" {
+        return Err(RespErr::CvInvalidWasmStripTool);
+      }
+    }
+    None => (),
+  }
+  if !tinygo_versions.contains_key(&req_data.tinygo_version) {
+    return Err(RespErr::CvInvalidTinyGoVersion);
+  }
+  let tinygo_libs = tinygo_versions.get(&req_data.tinygo_version).unwrap().clone();
   ctx.db.cv_contracts.delete_one(doc! { "_id": &address }).await.map_err(|e| RespErr::DbErr { msg: e.to_string() })?;
   let new_cv = CVContract {
     id: address.clone(),
-    bytecode_cid: contract.code.clone(),
-    username: Some(username.clone()),
+    code: contract.code.clone(),
     request_ts: DateTime::from_chrono(Utc::now()),
     verified_ts: None,
-    status: CVStatus::Pending.to_string(),
+    status: CVStatus::Queued.to_string(),
+    repo_url: repo_url,
+    repo_branch: repo_branch,
+    repo_commit: None,
+    tinygo_version: req_data.tinygo_version.clone(),
+    go_version: tinygo_libs.go,
+    llvm_version: tinygo_libs.llvm,
+    strip_tool: req_data.strip_tool.clone(),
     exports: None,
-    license: req_data.license.clone(),
+    license: None,
     lang: contract.runtime.value.clone(),
   };
   ctx.db.cv_contracts.insert_one(new_cv).await.map_err(|e| RespErr::DbErr { msg: e.to_string() })?;
   Ok(HttpResponse::Ok().json(SuccessRes { success: true }))
-}
-
-#[derive(Debug, MultipartForm)]
-struct VerifUploadForm {
-  /// Contract source code file
-  #[multipart(limit = "1MB")]
-  file: TempFile,
-  /// Contract source code filename
-  filename: Text<String>,
-}
-
-#[utoipa::path(
-  post,
-  path = "/verify/{address}/upload",
-  summary = "Upload a contract source file for verification",
-  description = "Upload a contract source file for verification.\n\nRequest body is a multipart/form-data consists of a `file` containing the source code file to upload and `filename` which is the filename of the uploaded file.",
-  responses(
-    (status = 200, description = "Contract source code uploaded successfully", body = SuccessRes),
-    (status = 400, description = "Failed to upload source code", body = ErrorRes),
-    (status = 404, description = "Contract verification request does not exist", body = ErrorRes)
-  ),
-  params(("address" = String, Path, description = "Contract address to verify"))
-  // FIXME: upload form request body here
-)]
-#[post("/verify/{address}/upload")]
-pub async fn upload_file(
-  path: web::Path<String>,
-  req: HttpRequest,
-  MultipartForm(mut form): MultipartForm<VerifUploadForm>,
-  ctx: web::Data<Context>
-) -> Result<HttpResponse, RespErr> {
-  if ctx.compiler.is_none() {
-    return Err(RespErr::CvDisabled);
-  }
-  let username = verify_auth_token(&req)?;
-  let address = path.into_inner();
-  debug!("Uploaded file {} with size: {}", form.file.file_name.unwrap(), form.file.size);
-  debug!("Contract address {}, new filename: {}", &address, &form.filename.0);
-  if form.file.size > 1024 * 1024 {
-    return Err(RespErr::BadRequest { msg: String::from("Uploaded file size exceeds 1MB limit") });
-  }
-  let mut contents = String::new();
-  match form.file.file.read_to_string(&mut contents) {
-    Ok(_) => (),
-    Err(e) => {
-      error!("Failed to read uploaded file: {}", e.to_string());
-      return Err(RespErr::BadRequest {
-        msg: String::from("Failed to process uploaded file, most likely file is not in UTF-8 format."),
-      });
-    }
-  }
-  let fname_regex = Regex::new(r"^[A-Za-z0-9._-]+$").expect("Invalid regex pattern");
-  if form.filename.0.starts_with("/") {
-    return Err(RespErr::CvInvalidFname);
-  }
-  let fname_split: Vec<&str> = form.filename.0.split('/').collect();
-  if
-    fname_split.len() == 0 ||
-    (fname_split[0] != "go.mod" && fname_split[0] != "go.sum" && fname_split[0] != "sdk" && fname_split[0] != "contract")
-  {
-    return Err(RespErr::CvInvalidFname);
-  }
-  for fname in fname_split {
-    if fname.len() == 0 || fname.len() > 30 {
-      return Err(RespErr::CvInvalidFnameLen);
-    } else if fname.starts_with("..") || !fname_regex.is_match(fname) {
-      return Err(RespErr::CvInvalidFname);
-    }
-  }
-  match ctx.db.cv_contracts.find_one(doc! { "_id": &address }).await.map_err(|e| RespErr::DbErr { msg: e.to_string() })? {
-    Some(cv) => {
-      if cv.status != "pending" {
-        return Err(RespErr::BadRequest { msg: format!("Status needs to be pending, it is currently {}", cv.status) });
-      } else if config.auth.enabled && &username != &cv.username.unwrap_or(String::from("")) {
-        return Err(RespErr::CvNotAuthorized);
-      }
-    }
-    None => {
-      return Err(RespErr::BadRequest { msg: String::from("Begin contract verification with /verify/new first.") });
-    }
-  }
-  let new_file = CVContractCode {
-    addr: address.clone(),
-    fname: form.filename.0.clone(),
-    content: contents.clone(),
-  };
-  ctx.db.cv_source_codes.insert_one(new_file).await.map_err(|e| RespErr::DbErr { msg: e.to_string() })?;
-  Ok(HttpResponse::Ok().json(SuccessRes { success: true }))
-}
-
-#[utoipa::path(
-  post,
-  path = "/verify/{address}/complete",
-  summary = "Submit contract verification request to the compiler queue post file upload",
-  responses(
-    (status = 200, description = "Contract queued for verification successfully", body = SuccessRes),
-    (status = 400, description = "Failed to complete contract verification upload", body = ErrorRes)
-  ),
-  params(("address" = String, Path, description = "Contract address to verify"))
-)]
-#[post("/verify/{address}/complete")]
-async fn upload_complete(path: web::Path<String>, req: HttpRequest, ctx: web::Data<Context>) -> Result<HttpResponse, RespErr> {
-  if ctx.compiler.is_none() {
-    return Err(RespErr::CvDisabled);
-  }
-  let username = verify_auth_token(&req)?;
-  let address = path.into_inner();
-  match ctx.db.cv_contracts.find_one(doc! { "_id": &address }).await.map_err(|e| RespErr::DbErr { msg: e.to_string() })? {
-    Some(cv) => {
-      if cv.status != "pending" {
-        return Err(RespErr::BadRequest { msg: String::from("Status is currently not pending upload") });
-      } else if config.auth.enabled && &username != &cv.username.unwrap_or(String::from("")) {
-        return Err(RespErr::CvNotAuthorized);
-      }
-    }
-    None => {
-      return Err(RespErr::BadRequest { msg: String::from("Contract does not exist") });
-    }
-  }
-  let file_count = ctx.db.cv_source_codes
-    .count_documents(doc! { "addr": &address }).await
-    .map_err(|e| RespErr::DbErr { msg: e.to_string() })?;
-  if file_count < 1 {
-    return Err(RespErr::BadRequest { msg: String::from("No source files were uploaded for this contract") });
-  }
-  ctx.db.cv_contracts
-    .update_one(doc! { "_id": &address }, doc! { "$set": doc! {"status": CVStatus::Queued.to_string()} }).await
-    .map_err(|e| RespErr::DbErr { msg: e.to_string() })?;
-  if ctx.compiler.is_some() {
-    ctx.compiler.clone().unwrap().notify();
-  }
-  Ok(HttpResponse::Ok().json(SuccessRes { success: true }))
-}
-
-#[get("/languages")]
-async fn list_langs() -> Result<HttpResponse, RespErr> {
-  Ok(HttpResponse::Ok().json(vec!["go"]))
-}
-
-#[get("/licenses")]
-async fn list_licenses(ctx: web::Data<Context>) -> Result<HttpResponse, RespErr> {
-  let result = ctx.db.cv_licenses.distinct("name", doc! {}).await.map_err(|e| RespErr::DbErr { msg: e.to_string() })?;
-  let result_arr: Vec<&str> = result
-    .iter()
-    .filter_map(|bson| bson.as_str())
-    .collect();
-  Ok(HttpResponse::Ok().json(result_arr))
 }
 
 #[utoipa::path(
@@ -408,106 +300,68 @@ async fn list_licenses(ctx: web::Data<Context>) -> Result<HttpResponse, RespErr>
 async fn contract_info(path: web::Path<String>, ctx: web::Data<Context>) -> Result<HttpResponse, RespErr> {
   let addr = path.into_inner();
   let contract = ctx.db.cv_contracts.find_one(doc! { "_id": &addr }).await.map_err(|e| RespErr::DbErr { msg: e.to_string() })?;
-  if contract.is_none() {
-    return Ok(HttpResponse::NotFound().json(json!({"error": "contract not found"})));
+  if contract.is_some() {
+    let contract = contract.unwrap();
+    let result = CVContractResult {
+      address: addr,
+      code: contract.code,
+      similar_match: None,
+      request_ts: contract.request_ts.to_chrono().format(TIMESTAMP_FORMAT).to_string(),
+      verified_ts: contract.verified_ts.map(|t| t.to_chrono().format(TIMESTAMP_FORMAT).to_string()),
+      status: contract.status.clone(),
+      repo_url: contract.repo_url,
+      repo_branch: contract.repo_branch,
+      repo_commit: contract.repo_commit,
+      tinygo_version: contract.tinygo_version,
+      go_version: contract.go_version,
+      llvm_version: contract.llvm_version,
+      strip_tool: contract.strip_tool,
+      exports: contract.exports,
+      license: contract.license,
+      lang: contract.lang.clone(),
+    };
+    return Ok(HttpResponse::Ok().json(result));
   }
-  let contract = contract.unwrap();
-  let files = ctx.db.cv_source_codes
-    .distinct("fname", doc! { "addr": &addr, "is_lockfile": false }).await
-    .map_err(|e| RespErr::DbErr { msg: e.to_string() })?;
-  let files_arr: Vec<String> = files
-    .iter()
-    .filter_map(|bson| Some(bson.to_string()))
-    .collect();
-  let lockfilename = ctx.db.cv_source_codes
-    .find_one(doc! { "addr": &addr, "is_lockfile": true }).await
-    .map_err(|e| RespErr::DbErr { msg: e.to_string() })?
-    .map(|f| f.fname);
-  let result = CVContractResult {
-    address: addr,
-    code: contract.bytecode_cid.clone(),
-    username: contract.username.clone(),
-    request_ts: contract.request_ts.to_chrono().format(TIMESTAMP_FORMAT).to_string(),
-    verified_ts: contract.verified_ts.map(|t| t.to_chrono().format(TIMESTAMP_FORMAT).to_string()),
-    status: contract.status.clone(),
-    exports: contract.exports,
-    files: files_arr.clone(),
-    lockfile: lockfilename,
-    license: contract.license.clone(),
-    lang: contract.lang.clone(),
+  let deployed_contract = match
+    ctx.db.contracts.find_one(doc! { "id": &addr }).await.map_err(|e| RespErr::DbErr { msg: e.to_string() })?
+  {
+    Some(c) => c,
+    None => {
+      return Err(RespErr::ContractNotFound);
+    }
   };
-  Ok(HttpResponse::Ok().json(result))
-}
-
-#[utoipa::path(
-  get,
-  path = "/contract/{address}/files/ls",
-  summary = "List all source files of a contract",
-  responses(
-    (status = 200, description = "List of filenames", body = Vec<&str>, example = "[\"index.ts\"]"),
-    (status = 400, description = "Failed to query files of the contract", body = ErrorRes)
-  ),
-  params(("address" = String, Path, description = "Contract address"))
-)]
-#[get("/contract/{address}/files/ls")]
-async fn contract_files_ls(path: web::Path<String>, ctx: web::Data<Context>) -> Result<HttpResponse, RespErr> {
-  let addr = path.into_inner();
-  let files = ctx.db.cv_source_codes
-    .distinct("fname", doc! { "addr": &addr, "is_lockfile": false }).await
-    .map_err(|e| RespErr::DbErr { msg: e.to_string() })?;
-  let files_arr: Vec<&str> = files
-    .iter()
-    .filter_map(|bson| bson.as_str())
-    .collect();
-  Ok(HttpResponse::Ok().json(files_arr))
-}
-
-#[utoipa::path(
-  get,
-  path = "/contract/{address}/files/cat/{filename}",
-  summary = "Get contents of a file in a contract source code",
-  responses(
-    (status = 200, description = "File contents", body = String),
-    (status = 400, description = "Failed to query file", body = ErrorRes),
-    (status = 404, description = "File not found", body = ErrorRes)
-  ),
-  params(("address" = String, Path, description = "Contract address"), ("filename" = String, Path, description = "Filename"))
-)]
-#[get("/contract/{address}/files/cat/{filename}")]
-async fn contract_files_cat(path: web::Path<(String, String)>, ctx: web::Data<Context>) -> Result<HttpResponse, RespErr> {
-  let (addr, filename) = path.into_inner();
   match
-    ctx.db.cv_source_codes
-      .find_one(doc! { "addr": &addr, "fname": &filename }).await
+    ctx.db.cv_contracts
+      .find_one(doc! { "code": &deployed_contract.code }).await
       .map_err(|e| RespErr::DbErr { msg: e.to_string() })?
   {
-    Some(file) => Ok(HttpResponse::Ok().body(file.content)),
-    None => Ok(HttpResponse::NotFound().body("Error 404 file not found")),
+    Some(similar) => {
+      if similar.status == CVStatus::Success.to_string() {
+        return Ok(
+          HttpResponse::Ok().json(CVContractResult {
+            address: addr,
+            code: similar.code,
+            similar_match: Some(similar.id),
+            request_ts: similar.request_ts.to_chrono().format(TIMESTAMP_FORMAT).to_string(),
+            verified_ts: similar.verified_ts.map(|t| t.to_chrono().format(TIMESTAMP_FORMAT).to_string()),
+            status: similar.status.clone(),
+            repo_url: similar.repo_url,
+            repo_branch: similar.repo_branch,
+            repo_commit: similar.repo_commit,
+            tinygo_version: similar.tinygo_version,
+            go_version: similar.go_version,
+            llvm_version: similar.llvm_version,
+            strip_tool: similar.strip_tool,
+            exports: similar.exports,
+            license: similar.license,
+            lang: similar.lang.clone(),
+          })
+        );
+      }
+    }
+    None => (),
   }
-}
-
-#[utoipa::path(
-  get,
-  path = "/contract/{address}/files/catall",
-  summary = "Get contents of all files for a contract (excluding lockfile)",
-  responses(
-    (status = 200, description = "Contents of all files for contract", body = CVContractCatFile),
-    (status = 400, description = "Failed to query files", body = ErrorRes)
-  ),
-  params(("address" = String, Path, description = "Contract address"))
-)]
-#[get("/contract/{address}/files/catall")]
-async fn contract_files_cat_all(path: web::Path<String>, ctx: web::Data<Context>) -> Result<HttpResponse, RespErr> {
-  let addr = path.into_inner();
-  let mut files_cursor = ctx.db.cv_source_codes
-    .find(doc! { "addr": &addr }).await
-    .map_err(|e| RespErr::DbErr { msg: e.to_string() })?;
-  let mut results = Vec::new();
-  while let Some(f) = files_cursor.next().await {
-    let file = f.map_err(|_| RespErr::InternalErr { msg: String::from("Failed to parse file") })?;
-    results.push(CVContractCatFile { name: file.fname, content: file.content });
-  }
-  Ok(HttpResponse::Ok().json(results))
+  Err(RespErr::ContractNotFound)
 }
 
 #[derive(OpenApi)]
@@ -517,7 +371,7 @@ async fn contract_files_cat_all(path: web::Path<String>, ctx: web::Data<Context>
     description = "Verifies VSC contracts by compiling the uploaded contract source code and comparing the resulting output bytecode against the deployed contract bytecode.",
     license(name = "MIT")
   ),
-  paths(verify_new, upload_file, upload_complete, contract_info, contract_files_ls, contract_files_cat, contract_files_cat_all),
+  paths(verify_new, contract_info),
   components(responses(ErrorRes, SuccessRes))
 )]
 struct OpenApiDoc;

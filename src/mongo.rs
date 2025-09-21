@@ -1,9 +1,9 @@
-use bson::doc;
-use mongodb::{ options::{ ClientOptions, IndexOptions }, Client, Collection, IndexModel };
+use futures_util::TryStreamExt;
+use mongodb::{ options::ClientOptions, Client, Collection, IndexModel };
 use std::error::Error;
 use log::info;
 use crate::types::{
-  cv::{ CVContract, CVContractCode, CVIdName },
+  cv::CVContract,
   vsc::{
     BlockHeaderRecord,
     BridgeStats,
@@ -42,8 +42,6 @@ pub struct MongoDB {
 
   // contract verifier
   pub cv_contracts: Collection<CVContract>,
-  pub cv_source_codes: Collection<CVContractCode>,
-  pub cv_licenses: Collection<CVIdName>,
 }
 
 impl MongoDB {
@@ -69,46 +67,14 @@ impl MongoDB {
       bridge_stats: db2.collection("bridge_stats"),
       network_stats: db2.collection("network_stats"),
       cv_contracts: db3.collection("contracts"),
-      cv_source_codes: db3.collection("source_code"),
-      cv_licenses: db3.collection("licenses"),
     })
   }
 
   pub async fn setup(&self) -> Result<(), Box<dyn Error>> {
-    let already_setup = self.cv_licenses.find_one(doc! {}).await?;
-    if already_setup.is_some() {
+    let existing_idxes = self.cv_contracts.list_indexes().await?.try_collect::<Vec<_>>().await?;
+    if existing_idxes.len() > 0 {
       return Ok(());
     }
-    let licenses = vec![
-      "MIT",
-      "Apache-2.0",
-      "GPL-3.0-only",
-      "GPL-3.0-or-later",
-      "LGPL-3.0-only",
-      "LGPL-3.0-or-later",
-      "AGPL-3.0-only",
-      "AGPL-3.0-or-later",
-      "MPL 2.0",
-      "BSL-1.0",
-      "WTFPL",
-      "Unlicense"
-    ];
-    let licenses: Vec<CVIdName> = licenses
-      .into_iter()
-      .enumerate()
-      .map(|(i, name)| CVIdName {
-        id: i as i32,
-        name: name.to_string(),
-      })
-      .collect();
-    self.cv_licenses.insert_many(licenses).await?;
-
-    // Create compound unique index for source_code collection
-    let source_codes_index = IndexModel::builder()
-      .keys(bson::doc! { "addr": 1, "fname": 1 })
-      .options(IndexOptions::builder().unique(true).build())
-      .build();
-    self.cv_source_codes.create_index(source_codes_index).await?;
 
     // Create indexes for contracts collection
     let status_index = IndexModel::builder()
@@ -120,6 +86,11 @@ impl MongoDB {
       .keys(bson::doc! { "status": 1, "request_ts": 1 })
       .build();
     self.cv_contracts.create_index(status_ts_index).await?;
+
+    let code_index = IndexModel::builder()
+      .keys(bson::doc! { "code": 1 })
+      .build();
+    self.cv_contracts.create_index(code_index).await?;
 
     Ok(())
   }

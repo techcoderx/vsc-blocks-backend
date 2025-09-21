@@ -5,7 +5,7 @@ use reqwest;
 use utoipa::{ ToResponse, ToSchema };
 use log::error;
 use std::fmt;
-use crate::{ compiler::Compiler, mongo::MongoDB };
+use crate::{ mongo::MongoDB };
 
 #[derive(Display, Error)]
 pub enum RespErr {
@@ -21,11 +21,15 @@ pub enum RespErr {
   #[display("Signature is too old")] SigTooOld,
   #[display("Block hash does not match the corresponding block number")] SigBhNotMatch,
   #[display("Failed to generate access token")] TokenGenFail,
+  #[display("Contract not found")] ContractNotFound,
   #[display("Contract verifier is disabled")] CvDisabled,
   #[display("Only contract deployer or owner can request verification")] CvNotAuthorized,
-  #[display("Invalid filename")] CvInvalidFname,
-  #[display("File/folder name length must be between 1 to 30 characters")] CvInvalidFnameLen,
+  #[display("Invalid GitHub repository URL")] CvInvalidGitHubURL,
+  #[display("Invalid git branch name")] CvInvalidGitBranch,
+  #[display("Invalid Wasm strip tool name")] CvInvalidWasmStripTool,
+  #[display("Invalid TinyGo version")] CvInvalidTinyGoVersion,
   #[display("Verification retry is only allowed 12 hours after the previous request time")] CvRetryLater,
+  #[display("Another contract with exact bytecode was already verified")] CvSimilarMatch,
   #[display("{msg}")] InternalErr {
     msg: String,
   },
@@ -66,11 +70,15 @@ impl actix_web::error::ResponseError for RespErr {
       RespErr::TokenGenFail => StatusCode::INTERNAL_SERVER_ERROR,
       RespErr::InternalErr { .. } => StatusCode::INTERNAL_SERVER_ERROR,
       RespErr::BadRequest { .. } => StatusCode::BAD_REQUEST,
+      RespErr::ContractNotFound => StatusCode::NOT_FOUND,
       RespErr::CvDisabled => StatusCode::IM_A_TEAPOT,
       RespErr::CvNotAuthorized => StatusCode::FORBIDDEN,
-      RespErr::CvInvalidFname => StatusCode::BAD_REQUEST,
-      RespErr::CvInvalidFnameLen => StatusCode::BAD_REQUEST,
+      RespErr::CvInvalidGitHubURL => StatusCode::BAD_REQUEST,
+      RespErr::CvInvalidGitBranch => StatusCode::BAD_REQUEST,
+      RespErr::CvInvalidWasmStripTool => StatusCode::BAD_REQUEST,
+      RespErr::CvInvalidTinyGoVersion => StatusCode::BAD_REQUEST,
       RespErr::CvRetryLater => StatusCode::TOO_MANY_REQUESTS,
+      RespErr::CvSimilarMatch => StatusCode::FOUND,
     }
   }
 }
@@ -78,7 +86,7 @@ impl actix_web::error::ResponseError for RespErr {
 #[derive(Clone)]
 pub struct Context {
   pub db: MongoDB,
-  pub compiler: Option<Compiler>,
+  // pub compiler: Option<Compiler>,
   pub http_client: reqwest::Client,
 }
 

@@ -3,3 +3,4 @@
 /debug
 config.toml
 .env
+go_compiler
