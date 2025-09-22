@@ -1,0 +1,11 @@
+{
+  "id": "vsc1Bem8RnoLgGPP7E2MBN52ekrdVqy2LNpSqF",
+  "code": "bafkreibwwj3fypek5uz6l3scacy47yw3b2adgbxmfab2ybmkarljaggbey",
+  "creation_height": 97958074,
+  "creator": "hive:techcoderx.vsc",
+  "description": "",
+  "name": "go test",
+  "owner": "hive:techcoderx.vsc",
+  "runtime": { "value": "go" },
+  "tx_id": "bef70add6d21cd812cf68da2caee72da05de48b4"
+}

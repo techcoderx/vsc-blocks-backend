@@ -1,0 +1,11 @@
+{
+  "id": "vsc1BmW9jQdUAXsQXC9zQkAsfDcYq2KBadaZiG",
+  "code": "bafkreiaero73oxo6jfc3k2kpjybqk2rojsicbvbh4ke3rtks2k4sttwrse",
+  "creation_height": 97975975,
+  "creator": "hive:techcoderx.vsc",
+  "description": "",
+  "name": "go test striped",
+  "owner": "hive:techcoderx.vsc",
+  "runtime": { "value": "go" },
+  "tx_id": "7e7126edec7a70409e685db39ad4932a9f81fccf"
+}

@@ -1,9 +1,0 @@
-{
-  "name": "as-compiler",
-  "version": "1.0.0",
-  "type": "module",
-  "scripts": {
-    "asc": "asc src/index.ts -o build/build.wasm --optimize --exportRuntime --runPasses asyncify",
-    "asc:debug": "asc src/index.ts --target debug; node list-exports.js"
-  }
-}

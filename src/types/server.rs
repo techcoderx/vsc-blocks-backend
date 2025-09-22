@@ -5,7 +5,7 @@ use reqwest;
 use utoipa::{ ToResponse, ToSchema };
 use log::error;
 use std::fmt;
-use crate::{ mongo::MongoDB };
+use crate::{ compiler::Compiler, mongo::MongoDB };
 
 #[derive(Display, Error)]
 pub enum RespErr {
@@ -86,7 +86,7 @@ impl actix_web::error::ResponseError for RespErr {
 #[derive(Clone)]
 pub struct Context {
   pub db: MongoDB,
-  // pub compiler: Option<Compiler>,
+  pub compiler: Option<Compiler>,
   pub http_client: reqwest::Client,
 }
 

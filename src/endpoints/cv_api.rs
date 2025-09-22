@@ -5,7 +5,7 @@ use serde_json::{ json, Number, Value };
 use chrono::{ Utc, Duration };
 use regex::Regex;
 use hex;
-use sha2::{ digest::consts::False, Digest, Sha256 };
+use sha2::{ Digest, Sha256 };
 use jsonwebtoken::{ Header, EncodingKey, DecodingKey, Algorithm, Validation, errors::ErrorKind };
 use utoipa::{ OpenApi, ToSchema };
 use log::debug;
@@ -169,6 +169,8 @@ struct ReqVerifyNew {
   tinygo_version: String,
   /// Tool used to strip output WASM file.
   strip_tool: Option<String>,
+  /// Relative file path to contract entrypoint.
+  entrypoint: Option<String>,
 }
 
 #[utoipa::path(
@@ -192,9 +194,9 @@ async fn verify_new(
   req_data: web::Json<ReqVerifyNew>,
   ctx: web::Data<Context>
 ) -> Result<HttpResponse, RespErr> {
-  // if ctx.compiler.is_none() {
-  //   return Err(RespErr::CvDisabled);
-  // }
+  if ctx.compiler.is_none() {
+    return Err(RespErr::CvDisabled);
+  }
   let username = verify_auth_token(&req)?;
   let address = path.into_inner();
   let contract = ctx.db.contracts.find_one(doc! { "id": &address }).await.map_err(|e| RespErr::DbErr { msg: e.to_string() })?;
@@ -270,18 +272,20 @@ async fn verify_new(
     request_ts: DateTime::from_chrono(Utc::now()),
     verified_ts: None,
     status: CVStatus::Queued.to_string(),
-    repo_url: repo_url,
+    repo_name: repo,
     repo_branch: repo_branch,
-    repo_commit: None,
+    git_commit: None,
     tinygo_version: req_data.tinygo_version.clone(),
     go_version: tinygo_libs.go,
     llvm_version: tinygo_libs.llvm,
     strip_tool: req_data.strip_tool.clone(),
+    entrypoint: req_data.entrypoint.clone(),
     exports: None,
     license: None,
     lang: contract.runtime.value.clone(),
   };
   ctx.db.cv_contracts.insert_one(new_cv).await.map_err(|e| RespErr::DbErr { msg: e.to_string() })?;
+  ctx.compiler.clone().unwrap().notify();
   Ok(HttpResponse::Ok().json(SuccessRes { success: true }))
 }
 
@@ -309,13 +313,14 @@ async fn contract_info(path: web::Path<String>, ctx: web::Data<Context>) -> Resu
       request_ts: contract.request_ts.to_chrono().format(TIMESTAMP_FORMAT).to_string(),
       verified_ts: contract.verified_ts.map(|t| t.to_chrono().format(TIMESTAMP_FORMAT).to_string()),
       status: contract.status.clone(),
-      repo_url: contract.repo_url,
+      repo_name: contract.repo_name,
       repo_branch: contract.repo_branch,
-      repo_commit: contract.repo_commit,
+      git_commit: contract.git_commit,
       tinygo_version: contract.tinygo_version,
       go_version: contract.go_version,
       llvm_version: contract.llvm_version,
       strip_tool: contract.strip_tool,
+      entrypoint: contract.entrypoint,
       exports: contract.exports,
       license: contract.license,
       lang: contract.lang.clone(),
@@ -345,13 +350,14 @@ async fn contract_info(path: web::Path<String>, ctx: web::Data<Context>) -> Resu
             request_ts: similar.request_ts.to_chrono().format(TIMESTAMP_FORMAT).to_string(),
             verified_ts: similar.verified_ts.map(|t| t.to_chrono().format(TIMESTAMP_FORMAT).to_string()),
             status: similar.status.clone(),
-            repo_url: similar.repo_url,
+            repo_name: similar.repo_name,
             repo_branch: similar.repo_branch,
-            repo_commit: similar.repo_commit,
+            git_commit: similar.git_commit,
             tinygo_version: similar.tinygo_version,
             go_version: similar.go_version,
             llvm_version: similar.llvm_version,
             strip_tool: similar.strip_tool,
+            entrypoint: similar.entrypoint,
             exports: similar.exports,
             license: similar.license,
             lang: similar.lang.clone(),

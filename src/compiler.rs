@@ -1,4 +1,5 @@
 use bson::doc;
+use ipfs_dag::put_dag_raw;
 use mongodb::options::FindOneOptions;
 use mongodb::results::UpdateResult;
 use tokio::sync::Mutex;
@@ -6,15 +7,15 @@ use bollard::Docker;
 use bollard::container::{ Config, CreateContainerOptions, WaitContainerOptions };
 use bollard::models::{ HostConfig, ContainerWaitResponse };
 use futures_util::StreamExt;
-use serde_json;
 use chrono::Utc;
-use ipfs_dag::put_dag;
-use std::{ error::Error, fs, io, path::Path, process, sync::Arc };
+use tokio::time::{ sleep, Duration };
+use git2::Repository;
+use wasm_utils::list_exports;
+use std::{ error::Error, fs, io, path::Path, process::{ self, Command }, sync::Arc };
 use log::{ info, debug, error };
-use crate::config::ASCompilerConf;
+use crate::config::{ CompilerConf, GoCompilerConf };
 use crate::mongo::MongoDB;
-use crate::types::cv::{ CVContractCode, CVStatus };
-use crate::types::vsc::json_to_bson;
+use crate::types::cv::{ CVStatus, GithubBranchInfo, GithubRepoInfo };
 
 fn delete_if_exists(path: &str) -> Result<(), Box<dyn Error>> {
   let p = Path::new(path);
@@ -53,18 +54,19 @@ async fn update_status(db: &MongoDB, addr: &str, status: CVStatus) -> Result<Upd
   db.clone().cv_contracts.update_one(doc! { "_id": addr }, doc! { "$set": {"status": status.to_string() } }).await
 }
 
+/// Go contract compiler
 #[derive(Clone)]
 pub struct Compiler {
   db: MongoDB,
   running: Arc<Mutex<bool>>,
-  docker: Arc<Docker>,
-  image: String,
-  compiler_dir: String,
-  compiler_dir_host: String,
+  docker: Docker,
+  http_client: reqwest::Client,
+  options: CompilerConf,
+  go_options: GoCompilerConf,
 }
 
 impl Compiler {
-  pub fn init(db: &MongoDB, options: ASCompilerConf) -> Self {
+  pub fn init(db: &MongoDB, http_client: &reqwest::Client, go_options: &GoCompilerConf, options: &CompilerConf) -> Self {
     let docker = match Docker::connect_with_local_defaults() {
       Ok(d) => d,
       Err(e) => {
@@ -72,14 +74,13 @@ impl Compiler {
         process::exit(1)
       }
     };
-    let cdh = options.src_dir_host.unwrap_or(options.src_dir.clone());
     return Compiler {
       db: db.clone(),
       running: Arc::new(Mutex::new(false)),
-      docker: Arc::new(docker),
-      image: options.image,
-      compiler_dir: options.src_dir,
-      compiler_dir_host: cdh,
+      docker: docker,
+      http_client: http_client.clone(),
+      options: options.clone(),
+      go_options: go_options.clone(),
     };
   }
 
@@ -94,13 +95,13 @@ impl Compiler {
   fn run(&self) {
     let db = self.db.clone();
     let running = Arc::clone(&self.running);
-    let docker = Arc::clone(&self.docker);
-    let image = self.image.clone();
-    let compiler_dir = self.compiler_dir.clone();
-    let compiler_dir_host = self.compiler_dir_host.clone();
-    let mkdir = create_dir_if_not_exists(format!("{}/src", compiler_dir));
+    let docker = self.docker.clone();
+    let http_client = self.http_client.clone();
+    let go_options = self.go_options.clone();
+    let options = self.options.clone();
+    let mkdir = create_dir_if_not_exists(go_options.output_dir.clone());
     if mkdir.is_err() {
-      error!("Failed to create src directory");
+      error!("Failed to create output directory");
       return;
     }
     debug!("Spawning new compiler thread");
@@ -123,129 +124,234 @@ impl Compiler {
         let next_contract = next_contract.unwrap();
         let next_addr: &str = &next_contract.id;
         info!("Compiling contract {}", next_addr);
-        let _ = update_status(&db, next_addr, CVStatus::InProgress).await;
-        let files = db.cv_source_codes.find(doc! { "addr": next_addr }).await;
-        if files.is_err() {
-          error!("Failed to retrieve files: {}", files.unwrap_err());
-          break;
-        }
-        let mut files_cursor = files.unwrap();
-        let mut file_count = 0;
-        while let Some(f) = files_cursor.next().await {
-          match f {
-            Ok(file) => {
-              let written = fs::write(format!("{}/src/{}", compiler_dir, file.fname), file.content);
-              if written.is_err() {
-                let _ = update_status(&db, next_addr, CVStatus::Failed).await;
-                error!("Failed to write files for contract {}", next_addr);
-                break 'mainloop;
+        let _ = delete_if_exists(go_options.src_dir.clone().as_str());
+        let _ = create_dir_if_not_exists(go_options.src_dir.clone());
+        if &next_contract.lang == "go" {
+          debug!("{}", options.github_api_key.clone().unwrap());
+          // golang
+          let repo_info = match
+            http_client
+              .get(format!("https://api.github.com/repos/{}", next_contract.repo_name))
+              .bearer_auth(options.github_api_key.clone().expect("Missing Github API key"))
+              .header("User-Agent", "VSC Blocks Contract Verifier")
+              .header("X-GitHub-Api-Version", "2022-11-28")
+              .send().await
+          {
+            Ok(r) => {
+              if r.status() == 404 {
+                error!("Repository {} does not exist", next_contract.repo_name);
+                let _ = update_status(&db, &next_contract.id, CVStatus::Failed).await;
+                continue 'mainloop;
+              } else if r.status() != 200 {
+                error!("Failed to fetch repository info from GitHub with status code {}", r.status());
+                sleep(Duration::from_secs(600)).await;
+                continue 'mainloop;
               }
-              file_count += 1;
+              let i = r.json::<GithubRepoInfo>().await;
+              if i.is_err() {
+                error!("Failed to parse repository info");
+                let _ = update_status(&db, &next_contract.id, CVStatus::Failed).await;
+                continue 'mainloop;
+              }
+              let i = i.unwrap();
+              if i.size > 10240 {
+                error!("Repository is too large, size is {}", i.size);
+                let _ = update_status(&db, &next_contract.id, CVStatus::Failed).await;
+                continue 'mainloop;
+              }
+              i
             }
-            Err(_) => {
-              let _ = update_status(&db, next_addr, CVStatus::Failed).await;
-              error!("Failed to parse files for contract {}", next_addr);
-              break 'mainloop;
+            Err(e) => {
+              error!("Failed to fetch repository info from GitHub: {}", e.to_string());
+              sleep(Duration::from_secs(600)).await;
+              continue 'mainloop;
             }
+          };
+          // let _ = update_status(&db, &next_contract.id, CVStatus::InProgress).await;
+          let mut branch_name = next_contract.repo_branch.clone();
+          if branch_name.len() == 0 {
+            branch_name = repo_info.default_branch;
           }
-        }
-        if file_count == 0 {
-          // this should not happen
-          let _ = update_status(&db, next_addr, CVStatus::Failed).await;
-          error!("There are no files to compile");
-          break 'mainloop;
-        }
-        /*
-        if &next_contract.lang == "assembly-script" {
-          // assemblyscript
-          let cont_name = "as-compiler";
-          let mut pkg_json: serde_json::Value = serde_json
-            ::from_str(include_str!("../as_compiler/package-template.json"))
-            .unwrap();
-          pkg_json["dependencies"] = next_contract.dependencies.unwrap();
-          let pkg_json_w = fs::write(format!("{}/package.json", compiler_dir), serde_json::to_string_pretty(&pkg_json).unwrap());
-          if pkg_json_w.is_err() {
-            let _ = update_status(&db, next_addr, CVStatus::Failed).await;
-            break;
+          let branch_info = match
+            http_client
+              .get(format!("https://api.github.com/repos/{}/branches/{}", next_contract.repo_name, branch_name))
+              .bearer_auth(options.github_api_key.clone().expect("Missing Github API key"))
+              .header("User-Agent", "VSC Blocks Contract Verifier")
+              .header("X-GitHub-Api-Version", "2022-11-28")
+              .send().await
+          {
+            Ok(b) => {
+              if b.status() == 404 {
+                error!("Branch {} does not exist", branch_name);
+                let _ = update_status(&db, &next_contract.id, CVStatus::Failed).await;
+                continue 'mainloop;
+              } else if b.status() != 200 {
+                error!("Failed to fetch repository info from GitHub with status code {}", b.status());
+                sleep(Duration::from_secs(600)).await;
+                continue 'mainloop;
+              }
+              let b = b.json::<GithubBranchInfo>().await;
+              if b.is_err() {
+                error!("Failed to parse branch info");
+                let _ = update_status(&db, &next_contract.id, CVStatus::Failed).await;
+                continue 'mainloop;
+              }
+              b.unwrap()
+            }
+            Err(e) => {
+              error!("Failed to fetch branch info from GitHub: {}", e.to_string());
+              sleep(Duration::from_secs(600)).await;
+              continue 'mainloop;
+            }
+          };
+          let git_commit = branch_info.commit.sha;
+          let repo = match
+            Repository::clone(
+              format!("https://github.com/{}", next_contract.repo_name).as_str(),
+              go_options.src_dir.clone().as_str()
+            )
+          {
+            Ok(r) => r,
+            Err(e) => {
+              error!("Failed to clone repository: {}", e.to_string());
+              sleep(Duration::from_secs(600)).await;
+              continue 'mainloop;
+            }
+          };
+          let checkout = repo.revparse_ext(&git_commit).and_then(|(object, reference)| {
+            repo.checkout_tree(&object, None).and_then(|_| {
+              match reference {
+                Some(gref) => repo.set_head(gref.name().unwrap()),
+                None => repo.set_head_detached(object.id()),
+              }
+            })
+          });
+          if checkout.is_err() {
+            error!("Failed to checkout commit");
+            let _ = update_status(&db, &next_contract.id, CVStatus::Failed);
+            continue 'mainloop;
           }
-          // run the compiler
           let cont_conf = Config {
-            image: Some(image.as_str()), // Image name
+            image: Some(format!("tinygo/tinygo:{}", next_contract.tinygo_version)),
             host_config: Some(HostConfig {
-              // Volume mount
-              binds: Some(vec![format!("{}:/workdir/compiler", compiler_dir_host)]),
-              // Auto-remove container on exit (equivalent to --rm)
+              binds: Some(
+                vec![
+                  format!("{}:/home/tinygo", go_options.src_host_dir.clone().unwrap_or(go_options.src_dir.clone())),
+                  format!("{}:/out", go_options.output_host_dir.clone().unwrap_or(go_options.output_dir.clone()))
+                ]
+              ),
               auto_remove: Some(true),
+              network_mode: Some(format!("none")),
+              // readonly_rootfs: Some(false),
+              memory: Some(1073741824),
               ..Default::default()
             }),
+            cmd: Some(
+              vec![
+                format!("timeout"),
+                format!("{}", go_options.timeout),
+                format!("tinygo"),
+                format!("build"),
+                format!("-gc=custom"),
+                format!("-scheduler=none"),
+                format!("-panic=trap"),
+                format!("-no-debug"),
+                format!("-target=wasm-unknown"),
+                format!("-o=/out/build.wasm"),
+                format!("{}", next_contract.entrypoint.unwrap_or(format!("contract/main.go")))
+              ]
+            ),
             ..Default::default()
           };
           // Create the container with a specific name
+          let cont_name = "go-compiler";
           let cont_opt = CreateContainerOptions {
             name: cont_name,
             platform: None,
           };
           let container = docker.create_container(Some(cont_opt), cont_conf).await.unwrap();
-          docker.start_container::<String>(&container.id, None).await.unwrap();
+          let start_container = docker.start_container::<String>(&container.id, None).await;
+          if start_container.is_err() {
+            let _ = update_status(&db, next_addr, CVStatus::Failed).await;
+            debug!("Failed to start compiler: {}", start_container.unwrap_err().to_string());
+            continue 'mainloop;
+          }
           // Wait for the container to finish and retrieve the exit code
           let mut stream = docker.wait_container(cont_name, Some(WaitContainerOptions { condition: "not-running" }));
           if let Some(Ok(ContainerWaitResponse { status_code, .. })) = stream.next().await {
             info!("Compiler exited with status code: {}", status_code);
             if status_code == 0 {
-              let output = fs::read(format!("{}/build/build.wasm", compiler_dir));
+              let mut output = fs::read(format!("{}/build.wasm", go_options.output_dir));
               if output.is_err() {
                 let _ = update_status(&db, next_addr, CVStatus::Failed).await;
                 error!("build.wasm not found");
-                break;
+                continue 'mainloop;
+              }
+              let strip_success = match next_contract.strip_tool.clone() {
+                Some(tool) => {
+                  let mut success = false;
+                  if &tool == "wabt" {
+                    let strip_status = Command::new(options.wasm_strip.clone())
+                      .arg("-o")
+                      .arg(format!("{}/build-striped.wasm", go_options.output_dir))
+                      .arg(format!("{}/build.wasm", go_options.output_dir))
+                      .status();
+                    success = strip_status.is_ok() && strip_status.unwrap().success();
+                  } else if &tool == "wasm-tools" {
+                    let strip_status = Command::new(options.wasm_tools.clone())
+                      .arg("strip")
+                      .arg("-o")
+                      .arg(format!("{}/build-striped.wasm", go_options.output_dir))
+                      .arg(format!("{}/build.wasm", go_options.output_dir))
+                      .status();
+                    success = strip_status.is_ok() && strip_status.unwrap().success();
+                  }
+                  success
+                }
+                None => true,
+              };
+              if next_contract.strip_tool.is_some() && strip_success {
+                output = fs::read(format!("{}/build-striped.wasm", go_options.output_dir));
+                if output.is_err() {
+                  // this should not happen
+                  let _ = update_status(&db, next_addr, CVStatus::Failed).await;
+                  error!("build-striped.wasm not found");
+                  continue 'mainloop;
+                }
               }
               let output = output.unwrap();
-              let output_cid = put_dag(output.as_slice());
-              let cid_match = &output_cid == &next_contract.bytecode_cid;
+              let output_cid = put_dag_raw(output.as_slice());
+              let cid_match = &output_cid == &next_contract.code;
               info!("Contract bytecode match: {}", cid_match.to_string().to_ascii_uppercase());
+              let exports = list_exports(&output)
+                .map(|e| Some(e))
+                .unwrap_or(None);
               if cid_match {
-                let exports: serde_json::Value = serde_json
-                  ::from_str(fs::read_to_string(format!("{}/build/exports.json", compiler_dir)).unwrap().as_str())
-                  .unwrap();
-                let _ = db.cv_source_codes
-                  .insert_one(CVContractCode {
-                    addr: String::from(next_addr),
-                    fname: String::from("pnpm-lock.yaml"),
-                    is_lockfile: true,
-                    content: fs::read_to_string(format!("{}/pnpm-lock.yaml", compiler_dir)).unwrap(),
-                  }).await
-                  .map_err(|e| { error!("Failed to insert pnpm-lock.yaml: {}", e) });
-                let updated_status = db.cv_contracts.update_one(
-                  doc! { "_id": String::from(next_addr) },
-                  doc! { "$set": {"status": CVStatus::Success.to_string(), "exports": json_to_bson(Some(&exports)), "verified_ts": bson::DateTime::from_chrono(Utc::now())} }
+                let _ = db.cv_contracts.update_one(
+                  doc! { "_id": next_contract.id },
+                  doc! { "$set": {
+                    "status": CVStatus::Success.to_string(),
+                    "verified_ts": bson::DateTime::from_chrono(Utc::now()),
+                    "git_commit": git_commit,
+                    "license": repo_info.license,
+                    "exports": exports
+                  }}
                 ).await;
-                if updated_status.is_err() {
-                  error!("Failed to update status after compilation: {}", updated_status.unwrap_err());
-                  break;
-                }
-                debug!("Exports: {}", exports);
               } else {
-                let updated_status = update_status(&db, next_addr, CVStatus::NotMatch).await;
-                if updated_status.is_err() {
-                  error!("Failed to update status for bytecode mismatch: {}", updated_status.unwrap_err());
-                  break;
-                }
+                let _ = update_status(&db, next_addr, CVStatus::NotMatch).await;
               }
             } else {
-              let updated_status = update_status(&db, next_addr, CVStatus::Failed).await;
-              if updated_status.is_err() {
-                error!("Failed to update status after failed compilation: {}", updated_status.unwrap_err());
-                break;
-              }
+              info!("Compilation failed with exit code {}", status_code);
+              let _ = update_status(&db, next_addr, CVStatus::Failed).await;
             }
+          } else {
+            info!("Compilation failed with unknown exit code");
+            let _ = update_status(&db, next_addr, CVStatus::Failed).await;
           }
           debug!("Deleting build artifacts");
-          let _ = delete_if_exists(format!("{}/node_modules", compiler_dir).as_str());
-          let _ = delete_if_exists(format!("{}/package.json", compiler_dir).as_str());
-          let _ = delete_if_exists(format!("{}/pnpm-lock.yaml", compiler_dir).as_str());
-          delete_dir_contents(fs::read_dir(format!("{}/src", compiler_dir)));
-          delete_dir_contents(fs::read_dir(format!("{}/build", compiler_dir)));
+          let _ = delete_if_exists(go_options.src_dir.clone().as_str());
+          delete_dir_contents(fs::read_dir(go_options.output_dir.clone()));
         }
-        */
       }
       debug!("Closing compiler thread");
       *r = false;

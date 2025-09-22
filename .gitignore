@@ -4,3 +4,4 @@
 config.toml
 .env
 go_compiler
+artifacts

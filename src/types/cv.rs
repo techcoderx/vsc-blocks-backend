@@ -5,9 +5,9 @@ use lazy_static::lazy_static;
 use std::{ collections::HashMap, fmt };
 
 pub enum CVStatus {
-  Pending,
+  // Pending,
   Queued,
-  InProgress,
+  // InProgress,
   Success,
   Failed,
   NotMatch,
@@ -16,9 +16,9 @@ pub enum CVStatus {
 impl fmt::Display for CVStatus {
   fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
     match self {
-      CVStatus::Pending => write!(f, "pending"),
+      // CVStatus::Pending => write!(f, "pending"),
       CVStatus::Queued => write!(f, "queued"),
-      CVStatus::InProgress => write!(f, "in progress"),
+      // CVStatus::InProgress => write!(f, "in progress"),
       CVStatus::Success => write!(f, "success"),
       CVStatus::Failed => write!(f, "failed"),
       CVStatus::NotMatch => write!(f, "not match"),
@@ -38,13 +38,16 @@ pub struct CVContract {
   #[serde(rename = "_id")]
   pub id: String,
   pub code: String,
-  pub repo_url: String,
+  pub repo_name: String,
   pub repo_branch: String,
-  pub repo_commit: Option<String>,
+  pub git_commit: Option<String>,
   pub tinygo_version: String,
   pub go_version: String,
   pub llvm_version: String,
+  #[serde(skip_serializing_if = "Option::is_none")]
   pub strip_tool: Option<String>,
+  #[serde(skip_serializing_if = "Option::is_none")]
+  pub entrypoint: Option<String>,
   pub request_ts: DateTime,
   pub verified_ts: Option<DateTime>,
   pub status: String,
@@ -67,12 +70,12 @@ pub struct CVContractResult {
   pub verified_ts: Option<String>,
   /// Contract verification status (pending, queued, in progress, success, failed, not match)
   pub status: String,
-  /// Repository URL
-  pub repo_url: String,
+  /// Repository name
+  pub repo_name: String,
   /// Git branch
   pub repo_branch: String,
   /// Git commit hash
-  pub repo_commit: Option<String>,
+  pub git_commit: Option<String>,
   /// TinyGo compiler version
   pub tinygo_version: String,
   /// Go version
@@ -81,12 +84,31 @@ pub struct CVContractResult {
   pub llvm_version: String,
   /// WASM strip tool that was used on the compiled output
   pub strip_tool: Option<String>,
+  /// Relative file path to contract entrypoint.
+  pub entrypoint: Option<String>,
   /// Contract public exports
   pub exports: Option<Vec<String>>,
   /// SPDX identifier of contract source code license as listed in https://spdx.org/licenses
   pub license: Option<String>,
   /// Language of contract source code
   pub lang: String,
+}
+
+#[derive(Clone, Deserialize)]
+pub struct GithubRepoInfo {
+  pub default_branch: String,
+  pub size: usize,
+  pub license: Option<String>,
+}
+
+#[derive(Clone, Deserialize)]
+pub struct GithubBranchCommit {
+  pub sha: String,
+}
+
+#[derive(Clone, Deserialize)]
+pub struct GithubBranchInfo {
+  pub commit: GithubBranchCommit,
 }
 
 lazy_static! {

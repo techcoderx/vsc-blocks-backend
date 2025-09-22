@@ -27,11 +27,17 @@ pub struct ServerConfig {
 #[derive(Serialize, Deserialize, Clone)]
 pub struct CompilerConf {
   pub enabled: Option<bool>,
+  pub github_api_key: Option<String>,
+  pub wasm_strip: String,
+  pub wasm_tools: String,
 }
 
 #[derive(Serialize, Deserialize, Clone)]
 pub struct GoCompilerConf {
   pub src_dir: String,
+  pub src_host_dir: Option<String>,
+  pub output_dir: String,
+  pub output_host_dir: Option<String>,
   pub timeout: usize,
 }
 
@@ -89,9 +95,17 @@ impl TomlConfig {
           key: Some(hex::encode(rand::rng().random::<[u8; 32]>())),
         },
         server: ServerConfig { address: String::from("127.0.0.1"), port: 8080 },
-        compiler: Some(CompilerConf { enabled: Some(false) }),
+        compiler: Some(CompilerConf {
+          enabled: Some(false),
+          github_api_key: None,
+          wasm_strip: format!("wasm-strip"),
+          wasm_tools: format!("wasm-tools"),
+        }),
         gocompiler: GoCompilerConf {
           src_dir: format!("{}/go_compiler", current_dir().unwrap().to_str().unwrap()),
+          src_host_dir: None,
+          output_dir: format!("{}/artifacts", current_dir().unwrap().to_str().unwrap()),
+          output_host_dir: None,
           timeout: 10,
         },
         discord: None,

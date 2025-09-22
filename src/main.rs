@@ -36,6 +36,11 @@ async fn main() -> std::io::Result<()> {
     )
     .filter_module("tracing", LevelFilter::Off)
     .filter_module("serenity", LevelFilter::Off)
+    .filter_module("reqwest", LevelFilter::Off)
+    .filter_module("h2", LevelFilter::Off)
+    .filter_module("rustls", LevelFilter::Off)
+    .filter_module("hyper", LevelFilter::Off)
+    .filter_module("tungstenite", LevelFilter::Off)
     .default_format()
     .init();
   info!("Version: {}", env!("CARGO_PKG_VERSION"));
@@ -53,6 +58,7 @@ async fn main() -> std::io::Result<()> {
       process::exit(1);
     }
   }
+  let http_client = reqwest::Client::new();
   let compiler = match
     config.compiler
       .clone()
@@ -60,13 +66,15 @@ async fn main() -> std::io::Result<()> {
       .unwrap_or(false)
   {
     true => {
-      let c = compiler::Compiler::init(&db, config.ascompiler.clone());
-      c.notify();
-      Some(c)
+      let ccf = config.compiler.clone().unwrap();
+      if ccf.github_api_key.is_none() {
+        error!("Missing Github API key for compiler");
+        process::exit(1);
+      }
+      Some(compiler::Compiler::init(&db, &http_client, &config.gocompiler, &config.compiler.clone().unwrap()))
     }
     false => None,
   };
-  let http_client = reqwest::Client::new();
   if config.be_indexer.unwrap_or(false) {
     let idxer = indexer::indexer::Indexer::init(&http_client, &db);
     idxer.start();
