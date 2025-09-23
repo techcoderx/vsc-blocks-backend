@@ -51,13 +51,6 @@ async fn main() -> std::io::Result<()> {
       process::exit(1);
     }
   };
-  match db.setup().await {
-    Ok(_) => (),
-    Err(e) => {
-      error!("Failed to setup database: {}", e.to_string());
-      process::exit(1);
-    }
-  }
   let http_client = reqwest::Client::new();
   let compiler = match
     config.compiler

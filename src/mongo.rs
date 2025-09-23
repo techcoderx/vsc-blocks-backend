@@ -1,4 +1,3 @@
-use futures_util::TryStreamExt;
 use mongodb::{ options::ClientOptions, Client, Collection, IndexModel };
 use std::error::Error;
 use log::info;
@@ -51,6 +50,11 @@ impl MongoDB {
     let db = client.database("go-vsc");
     let db2 = client.database("vsc2");
     let db3 = client.database("vsc-cv");
+    let cv_contracts: Collection<CVContract> = db3.collection("contracts");
+    let is_setup = db3.list_collection_names().await?.contains(&String::from("contracts"));
+    if !is_setup {
+      MongoDB::setup_cv_db(&cv_contracts).await?;
+    }
     info!("Connected to VSC MongoDB database successfully");
     Ok(MongoDB {
       contracts: db.collection("contracts"),
@@ -66,31 +70,26 @@ impl MongoDB {
       witness_stats: db2.collection("witness_stats"),
       bridge_stats: db2.collection("bridge_stats"),
       network_stats: db2.collection("network_stats"),
-      cv_contracts: db3.collection("contracts"),
+      cv_contracts: cv_contracts,
     })
   }
 
-  pub async fn setup(&self) -> Result<(), Box<dyn Error>> {
-    let existing_idxes = self.cv_contracts.list_indexes().await?.try_collect::<Vec<_>>().await?;
-    if existing_idxes.len() > 0 {
-      return Ok(());
-    }
-
+  pub async fn setup_cv_db(contracts_db: &Collection<CVContract>) -> Result<(), Box<dyn Error>> {
     // Create indexes for contracts collection
     let status_index = IndexModel::builder()
       .keys(bson::doc! { "status": 1 })
       .build();
-    self.cv_contracts.create_index(status_index).await?;
+    contracts_db.create_index(status_index).await?;
 
     let status_ts_index = IndexModel::builder()
       .keys(bson::doc! { "status": 1, "request_ts": 1 })
       .build();
-    self.cv_contracts.create_index(status_ts_index).await?;
+    contracts_db.create_index(status_ts_index).await?;
 
     let code_index = IndexModel::builder()
       .keys(bson::doc! { "code": 1 })
       .build();
-    self.cv_contracts.create_index(code_index).await?;
+    contracts_db.create_index(code_index).await?;
 
     Ok(())
   }
