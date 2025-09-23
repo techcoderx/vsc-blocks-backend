@@ -50,6 +50,10 @@ fn create_dir_if_not_exists(path: String) -> io::Result<()> {
   })
 }
 
+fn chown(path: &String, uid: usize, gid: usize) {
+  let _ = Command::new("chown").arg("-R").arg(format!("{}:{}", uid, gid)).arg(path.clone()).status();
+}
+
 async fn update_status(db: &MongoDB, addr: &str, status: CVStatus) -> Result<UpdateResult, mongodb::error::Error> {
   db.clone().cv_contracts.update_one(doc! { "_id": addr }, doc! { "$set": {"status": status.to_string() } }).await
 }
@@ -226,6 +230,7 @@ impl Compiler {
               }
             })
           });
+          chown(&go_options.src_dir, 1000, 1000);
           if checkout.is_err() {
             error!("Failed to checkout commit");
             let _ = update_status(&db, &next_contract.id, CVStatus::Failed);

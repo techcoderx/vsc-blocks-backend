@@ -3,16 +3,16 @@ FROM rust:latest AS builder
 
 WORKDIR /app
 
-# Copy source files
-COPY Cargo.toml Cargo.lock ./
-COPY src ./src
-COPY lib ./lib
-
 # Download Wabt and Wasm Tools
 RUN wget https://github.com/WebAssembly/wabt/releases/download/1.0.37/wabt-1.0.37-ubuntu-20.04.tar.gz && \
   tar -xvf wabt-1.0.37-ubuntu-20.04.tar.gz
 RUN wget https://github.com/bytecodealliance/wasm-tools/releases/download/v1.239.0/wasm-tools-1.239.0-x86_64-linux.tar.gz && \
   tar -xvf wasm-tools-1.239.0-x86_64-linux.tar.gz
+
+# Copy source files
+COPY Cargo.toml Cargo.lock ./
+COPY src ./src
+COPY lib ./lib
 
 # Build release binary
 RUN cargo build --release
