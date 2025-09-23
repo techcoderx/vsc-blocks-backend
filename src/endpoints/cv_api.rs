@@ -206,9 +206,9 @@ async fn verify_new(
   // only creator or owner can request verification if authentication enabled, or whitelisted users
   if config.auth.enabled {
     let whitelist = config.compiler.clone().expect("compiler config should be present").whitelist.clone();
-    if !whitelist.is_empty() && whitelist.contains(&username) {
+    if !whitelist.is_empty() && !whitelist.contains(&username) {
       return Err(RespErr::CvNotWhitelisted);
-    } else if &username != &contract.creator && &username != &contract.owner {
+    } else if whitelist.is_empty() && &username != &contract.creator && &username != &contract.owner {
       return Err(RespErr::CvNotAuthorized);
     }
   }
