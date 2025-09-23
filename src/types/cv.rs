@@ -26,7 +26,7 @@ impl fmt::Display for CVStatus {
   }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, ToSchema)]
 pub struct CVTinyGoLibVersions {
   pub go: String,
   pub llvm: String,

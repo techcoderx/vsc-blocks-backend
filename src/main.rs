@@ -90,6 +90,7 @@ async fn main() -> std::io::Result<()> {
           .service(cv_api::login)
           .service(cv_api::verify_new)
           .service(cv_api::contract_info)
+          .service(cv_api::gocompiler_versions)
       )
       .service(
         web

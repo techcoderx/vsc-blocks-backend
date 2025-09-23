@@ -12,7 +12,7 @@ use log::debug;
 use crate::{
   config::config,
   types::{
-    cv::{ CVContract, CVContractResult, CVStatus, tinygo_versions },
+    cv::{ tinygo_versions, CVContract, CVContractResult, CVStatus, CVTinyGoLibVersions },
     hive::{ DgpAtBlock, JsonRpcResp },
     server::{ Context, ErrorRes, RespErr, SuccessRes },
   },
@@ -377,6 +377,19 @@ async fn contract_info(path: web::Path<String>, ctx: web::Data<Context>) -> Resu
   Err(RespErr::ContractNotFound)
 }
 
+#[utoipa::path(
+  get,
+  path = "/gocompiler/versions",
+  summary = "List supported TinyGo compiler versions",
+  responses((status = 200, description = "List of TinyGo compiler versions with versions of its main dependencies", body = HashMap<String, CVTinyGoLibVersions>))
+)]
+#[get("/gocompiler/versions")]
+async fn gocompiler_versions() -> Result<HttpResponse, RespErr> {
+  let versions = tinygo_versions.clone();
+  let result = serde_json::to_value(&versions).expect("Should serialize to json correctly");
+  return Ok(HttpResponse::Ok().json(result));
+}
+
 #[derive(OpenApi)]
 #[openapi(
   info(
@@ -384,7 +397,7 @@ async fn contract_info(path: web::Path<String>, ctx: web::Data<Context>) -> Resu
     description = "Verifies VSC contracts by compiling the uploaded contract source code and comparing the resulting output bytecode against the deployed contract bytecode.",
     license(name = "MIT")
   ),
-  paths(verify_new, contract_info),
+  paths(verify_new, contract_info, gocompiler_versions),
   components(responses(ErrorRes, SuccessRes))
 )]
 struct OpenApiDoc;
