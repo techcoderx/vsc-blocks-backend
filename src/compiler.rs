@@ -258,7 +258,7 @@ impl Compiler {
                 format!("-no-debug"),
                 format!("-target=wasm-unknown"),
                 format!("-o=/out/build.wasm"),
-                format!("{}", next_contract.entrypoint.unwrap_or(format!("contract/main.go")))
+                format!("contract/main.go")
               ]
             ),
             ..Default::default()

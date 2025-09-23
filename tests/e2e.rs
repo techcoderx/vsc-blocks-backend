@@ -84,6 +84,7 @@ async fn test_e2e_verify_contract_go() {
         .unwrap_or(None),
       wasm_strip: format!("/usr/local/bin/wasm-strip"),
       wasm_tools: format!("/usr/local/bin/wasm-tools"),
+      whitelist: Vec::new(),
     })
   );
   let server_ctx = Context { db: db, compiler: Some(compiler), http_client: http_client.clone() };
@@ -110,7 +111,6 @@ async fn test_e2e_verify_contract_go() {
         "repo_url": "https://github.com/techcoderx/go-contract-template",
         "repo_branch": "wip2",
         "tinygo_version": "0.38.0",
-        "entrypoint": "src/main.go"
       })
     )
     .uri(format!("/cv-api/v1/verify/{}/new", contract_id).as_str())
@@ -181,7 +181,6 @@ async fn test_e2e_verify_contract_go() {
         "repo_branch": "wip2",
         "tinygo_version": "0.38.0",
         "strip_tool": "wabt",
-        "entrypoint": "src/main.go"
       })
     )
     .uri(format!("/cv-api/v1/verify/{}/new", contract_id).as_str())

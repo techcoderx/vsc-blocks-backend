@@ -30,6 +30,7 @@ pub struct CompilerConf {
   pub github_api_key: Option<String>,
   pub wasm_strip: String,
   pub wasm_tools: String,
+  pub whitelist: Vec<String>,
 }
 
 #[derive(Serialize, Deserialize, Clone)]
@@ -100,6 +101,7 @@ impl TomlConfig {
           github_api_key: None,
           wasm_strip: format!("wasm-strip"),
           wasm_tools: format!("wasm-tools"),
+          whitelist: Vec::new(),
         }),
         gocompiler: GoCompilerConf {
           src_dir: format!("{}/go_compiler", current_dir().unwrap().to_str().unwrap()),

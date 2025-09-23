@@ -38,6 +38,8 @@ pub struct CVContract {
   #[serde(rename = "_id")]
   pub id: String,
   pub code: String,
+  #[serde(skip_serializing_if = "Option::is_none")]
+  pub verifier: Option<String>,
   pub repo_name: String,
   pub repo_branch: String,
   pub git_commit: Option<String>,
@@ -46,8 +48,6 @@ pub struct CVContract {
   pub llvm_version: String,
   #[serde(skip_serializing_if = "Option::is_none")]
   pub strip_tool: Option<String>,
-  #[serde(skip_serializing_if = "Option::is_none")]
-  pub entrypoint: Option<String>,
   pub request_ts: DateTime,
   pub verified_ts: Option<DateTime>,
   pub status: String,
@@ -64,6 +64,8 @@ pub struct CVContractResult {
   pub code: String,
   /// Whether this contract was verified through identical bytecode of another contract
   pub similar_match: Option<String>,
+  /// Username whom verified the contract
+  pub verifier: Option<String>,
   /// Contract verification request timestamp
   pub request_ts: String,
   /// Contract verification completion timestamp
@@ -84,8 +86,6 @@ pub struct CVContractResult {
   pub llvm_version: String,
   /// WASM strip tool that was used on the compiled output
   pub strip_tool: Option<String>,
-  /// Relative file path to contract entrypoint.
-  pub entrypoint: Option<String>,
   /// Contract public exports
   pub exports: Option<Vec<String>>,
   /// SPDX identifier of contract source code license as listed in https://spdx.org/licenses

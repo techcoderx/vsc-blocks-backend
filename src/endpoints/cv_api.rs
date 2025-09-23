@@ -167,10 +167,8 @@ struct ReqVerifyNew {
   repo_branch: Option<String>,
   /// Tinygo version
   tinygo_version: String,
-  /// Tool used to strip output WASM file.
+  /// Tool used to strip output WASM file. Valid values: `wabt` or `wasm-tools`.
   strip_tool: Option<String>,
-  /// Relative file path to contract entrypoint.
-  entrypoint: Option<String>,
 }
 
 #[utoipa::path(
@@ -205,9 +203,14 @@ async fn verify_new(
   }
   let contract = contract.unwrap();
 
-  // only creator or owner can request verification if authentication enabled
-  if config.auth.enabled && &username != &contract.creator && &username != &contract.owner {
-    return Err(RespErr::CvNotAuthorized);
+  // only creator or owner can request verification if authentication enabled, or whitelisted users
+  if config.auth.enabled {
+    let whitelist = config.compiler.clone().expect("compiler config should be present").whitelist.clone();
+    if !whitelist.is_empty() && whitelist.contains(&username) {
+      return Err(RespErr::CvNotWhitelisted);
+    } else if &username != &contract.creator && &username != &contract.owner {
+      return Err(RespErr::CvNotAuthorized);
+    }
   }
 
   // existing contract verification status check
@@ -269,6 +272,10 @@ async fn verify_new(
   let new_cv = CVContract {
     id: address.clone(),
     code: contract.code.clone(),
+    verifier: match username.len() {
+      0 => None,
+      _ => Some(username),
+    },
     request_ts: DateTime::from_chrono(Utc::now()),
     verified_ts: None,
     status: CVStatus::Queued.to_string(),
@@ -279,7 +286,6 @@ async fn verify_new(
     go_version: tinygo_libs.go,
     llvm_version: tinygo_libs.llvm,
     strip_tool: req_data.strip_tool.clone(),
-    entrypoint: req_data.entrypoint.clone(),
     exports: None,
     license: None,
     lang: contract.runtime.value.clone(),
@@ -310,6 +316,7 @@ async fn contract_info(path: web::Path<String>, ctx: web::Data<Context>) -> Resu
       address: addr,
       code: contract.code,
       similar_match: None,
+      verifier: contract.verifier,
       request_ts: contract.request_ts.to_chrono().format(TIMESTAMP_FORMAT).to_string(),
       verified_ts: contract.verified_ts.map(|t| t.to_chrono().format(TIMESTAMP_FORMAT).to_string()),
       status: contract.status.clone(),
@@ -320,7 +327,6 @@ async fn contract_info(path: web::Path<String>, ctx: web::Data<Context>) -> Resu
       go_version: contract.go_version,
       llvm_version: contract.llvm_version,
       strip_tool: contract.strip_tool,
-      entrypoint: contract.entrypoint,
       exports: contract.exports,
       license: contract.license,
       lang: contract.lang.clone(),
@@ -347,6 +353,7 @@ async fn contract_info(path: web::Path<String>, ctx: web::Data<Context>) -> Resu
             address: addr,
             code: similar.code,
             similar_match: Some(similar.id),
+            verifier: similar.verifier,
             request_ts: similar.request_ts.to_chrono().format(TIMESTAMP_FORMAT).to_string(),
             verified_ts: similar.verified_ts.map(|t| t.to_chrono().format(TIMESTAMP_FORMAT).to_string()),
             status: similar.status.clone(),
@@ -357,7 +364,6 @@ async fn contract_info(path: web::Path<String>, ctx: web::Data<Context>) -> Resu
             go_version: similar.go_version,
             llvm_version: similar.llvm_version,
             strip_tool: similar.strip_tool,
-            entrypoint: similar.entrypoint,
             exports: similar.exports,
             license: similar.license,
             lang: similar.lang.clone(),
