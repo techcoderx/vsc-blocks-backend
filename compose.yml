@@ -6,6 +6,8 @@ services:
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock
       - ${VSC_CV_CONFIG_FILE:-./config.toml}:/app/config/config.toml
+      - ${VSC_CV_GO_SRCDIR:-./go_compiler}:/app/go_compiler
+      - ${VSC_CV_GO_OUTDIR:-./artifacts}:/app/artifacts
     ports:
       - ${VSC_CV_PORT:-8080}:8080
     healthcheck:
