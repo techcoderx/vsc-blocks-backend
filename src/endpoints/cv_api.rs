@@ -174,6 +174,7 @@ struct ReqVerifyNew {
 #[utoipa::path(
   post,
   path = "/verify/{address}/new",
+  context_path = "/cv-api/v1",
   summary = "Create a new contract verification request",
   description = "Create a new contract verification request from a GitHub repository.",
   responses(
@@ -299,6 +300,7 @@ async fn verify_new(
 #[utoipa::path(
   get,
   path = "/contract/{address}",
+  context_path = "/cv-api/v1",
   summary = "Lookup a contract's verification details",
   responses(
     (status = 200, description = "Contract verification details", body = CVContractResult),
@@ -380,6 +382,7 @@ async fn contract_info(path: web::Path<String>, ctx: web::Data<Context>) -> Resu
 #[utoipa::path(
   get,
   path = "/gocompiler/versions",
+  context_path = "/cv-api/v1",
   summary = "List supported TinyGo compiler versions",
   responses((status = 200, description = "List of TinyGo compiler versions with versions of its main dependencies", body = HashMap<String, CVTinyGoLibVersions>))
 )]
