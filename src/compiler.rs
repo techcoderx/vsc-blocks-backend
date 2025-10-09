@@ -246,9 +246,9 @@ impl Compiler {
                 ]
               ),
               auto_remove: Some(true),
-              network_mode: Some(format!("none")),
+              // network_mode: Some(format!("none")),
               // readonly_rootfs: Some(false),
-              memory: Some(1073741824),
+              memory: Some(2147483648),
               ..Default::default()
             }),
             cmd: Some(
@@ -263,7 +263,7 @@ impl Compiler {
                 format!("-no-debug"),
                 format!("-target=wasm-unknown"),
                 format!("-o=/out/build.wasm"),
-                format!("contract/main.go")
+                format!("./contract")
               ]
             ),
             ..Default::default()
