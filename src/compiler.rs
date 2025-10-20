@@ -131,7 +131,6 @@ impl Compiler {
         let _ = delete_if_exists(go_options.src_dir.clone().as_str());
         let _ = create_dir_if_not_exists(go_options.src_dir.clone());
         if &next_contract.lang == "go" {
-          debug!("{}", options.github_api_key.clone().unwrap());
           // golang
           let repo_info = match
             http_client
