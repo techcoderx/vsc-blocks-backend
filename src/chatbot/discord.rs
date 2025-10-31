@@ -32,18 +32,18 @@ fn time(timestamp: String, style: char) -> String {
 #[poise::command(
   slash_command,
   name_localized("en-US", "stats"),
-  description_localized("en-US", "Retrieve VSC network general stats")
+  description_localized("en-US", "Retrieve Magi network general stats")
 )]
 async fn stats(ctx: Context<'_>) -> Result<(), Error> {
   ctx.defer().await?;
   let props = get_props(&ctx.data().db).await?;
   let embed = CreateEmbed::new()
-    .title("VSC Network Info")
+    .title("Magi Network Info")
     .url(VSC_BLOCKS_HOME)
     .fields(
       vec![
         ("Hive Block Height", thousand_separator(props.last_processed_block), true),
-        ("VSC Block Height", thousand_separator(props.l2_block_height), true),
+        ("Magi Block Height", thousand_separator(props.l2_block_height), true),
         ("Transactions", thousand_separator(props.transactions), true),
         ("Epoch", thousand_separator(props.epoch), true),
         ("Witnesses", thousand_separator(props.witnesses), true),
@@ -56,7 +56,7 @@ async fn stats(ctx: Context<'_>) -> Result<(), Error> {
   Ok(())
 }
 
-#[poise::command(slash_command, name_localized("en-US", "witness"), description_localized("en-US", "Retrieve VSC witness info"))]
+#[poise::command(slash_command, name_localized("en-US", "witness"), description_localized("en-US", "Retrieve Magi witness info"))]
 async fn witness(
   ctx: Context<'_>,
   #[description = "L1 account username"] #[min_length = 3] #[max_length = 16] username: String
@@ -70,7 +70,7 @@ async fn witness(
   let stats = get_witness_stats(&ctx.data().db, username.clone()).await?;
   let wit = wit_info.unwrap();
   let embed = CreateEmbed::new()
-    .title("VSC Witness Info")
+    .title("Magi Witness Info")
     .url(format!("{}/address/hive:{}/witness", VSC_BLOCKS_HOME, username.clone()))
     .fields(
       vec![
@@ -104,9 +104,9 @@ async fn witness(
 #[poise::command(
   slash_command,
   name_localized("en-US", "epoch"),
-  description_localized("en-US", "Retrieve election results of a VSC epoch")
+  description_localized("en-US", "Retrieve election results of a Magi epoch")
 )]
-async fn epoch(ctx: Context<'_>, #[description = "VSC epoch number"] #[min = 0] epoch_num: u32) -> Result<(), Error> {
+async fn epoch(ctx: Context<'_>, #[description = "Magi epoch number"] #[min = 0] epoch_num: u32) -> Result<(), Error> {
   ctx.defer().await?;
   let epoch = ctx.data().db.elections.find_one(doc! { "epoch": epoch_num as i32 }).await?;
   if epoch.is_none() {
@@ -120,7 +120,7 @@ async fn epoch(ctx: Context<'_>, #[description = "VSC epoch number"] #[min = 0] 
     members.push(ElectionMember { account: format!("..."), key: format!("") });
   }
   let embed = CreateEmbed::new()
-    .title("VSC Epoch")
+    .title("Magi Epoch")
     .url(format!("{}/epoch/{}", VSC_BLOCKS_HOME, epoch_num))
     .fields(
       vec![
@@ -165,8 +165,8 @@ async fn epoch(ctx: Context<'_>, #[description = "VSC epoch number"] #[min = 0] 
   Ok(())
 }
 
-#[poise::command(slash_command, name_localized("en-US", "block"), description_localized("en-US", "Retrieve a VSC block"))]
-async fn block(ctx: Context<'_>, #[description = "VSC block number"] #[min = 1] block_num: u32) -> Result<(), Error> {
+#[poise::command(slash_command, name_localized("en-US", "block"), description_localized("en-US", "Retrieve a Magi block"))]
+async fn block(ctx: Context<'_>, #[description = "Magi block number"] #[min = 1] block_num: u32) -> Result<(), Error> {
   ctx.defer().await?;
   let block = ctx.data().db.blocks.find_one(doc! { "be_info.block_id": block_num as i32 }).await?;
   if block.is_none() {
@@ -175,7 +175,7 @@ async fn block(ctx: Context<'_>, #[description = "VSC block number"] #[min = 1] 
   }
   let block = block.unwrap();
   let embed = CreateEmbed::new()
-    .title("VSC Block")
+    .title("Magi Block")
     .url(format!("{}/block/{}", VSC_BLOCKS_HOME, block_num))
     .fields(
       vec![
@@ -207,7 +207,7 @@ async fn block(ctx: Context<'_>, #[description = "VSC block number"] #[min = 1] 
 #[poise::command(
   slash_command,
   name_localized("en-US", "balance"),
-  description_localized("en-US", "Retrieve address balance on VSC")
+  description_localized("en-US", "Retrieve address balance on Magi")
 )]
 async fn balance(
   ctx: Context<'_>,
@@ -222,7 +222,7 @@ async fn balance(
   let bal = get_user_balance(&ctx.data().db, address.clone()).await?;
   let cons_unstaking = get_user_cons_unstaking(&ctx.data().db, address.clone()).await?;
   let embed = CreateEmbed::new()
-    .title("VSC Address Balance")
+    .title("Magi Address Balance")
     .url(format!("{}/address/{}", VSC_BLOCKS_HOME, &address))
     .fields(
       vec![
@@ -240,7 +240,7 @@ async fn balance(
   Ok(())
 }
 
-#[poise::command(slash_command, name_localized("en-US", "tx"), description_localized("en-US", "Retrieve a VSC transaction"))]
+#[poise::command(slash_command, name_localized("en-US", "tx"), description_localized("en-US", "Retrieve a Magi transaction"))]
 async fn tx(
   ctx: Context<'_>,
   #[description = "Transaction ID"] #[min_length = 40] #[max_length = 100] tx_id: String
@@ -275,7 +275,7 @@ async fn tx(
     .send().await?;
   let dgp = dgp_req.json::<DgpAtBlock>().await?;
   let embed = CreateEmbed::new()
-    .title("VSC Transaction")
+    .title("Magi Transaction")
     .url(format!("{}/tx/{}", VSC_BLOCKS_HOME, tx_id))
     .fields(
       vec![

@@ -41,7 +41,7 @@ services:
     environment:
       BASE_URL: /docs
       URLS: >-
-        [{url: "http://localhost:8080/cv-api/v1/", name: "VSC Contract Verifier"}]
+        [{url: "http://localhost:8080/cv-api/v1/", name: "Magi Contract Verifier"}]
 
   cloudflared:
     image: cloudflare/cloudflared:latest

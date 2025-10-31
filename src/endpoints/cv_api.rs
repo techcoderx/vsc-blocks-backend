@@ -396,8 +396,8 @@ async fn gocompiler_versions() -> Result<HttpResponse, RespErr> {
 #[derive(OpenApi)]
 #[openapi(
   info(
-    title = "VSC Contract Verifier",
-    description = "Verifies VSC contracts by compiling the uploaded contract source code and comparing the resulting output bytecode against the deployed contract bytecode.",
+    title = "Magi Contract Verifier",
+    description = "Verifies Magi contracts by compiling the uploaded contract source code and comparing the resulting output bytecode against the deployed contract bytecode.",
     license(name = "MIT")
   ),
   paths(verify_new, contract_info, gocompiler_versions),

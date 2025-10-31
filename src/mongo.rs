@@ -55,7 +55,7 @@ impl MongoDB {
     if !is_setup {
       MongoDB::setup_cv_db(&cv_contracts).await?;
     }
-    info!("Connected to VSC MongoDB database successfully");
+    info!("Connected to Magi MongoDB database successfully");
     Ok(MongoDB {
       contracts: db.collection("contracts"),
       elections: db.collection("elections"),

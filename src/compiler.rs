@@ -136,7 +136,7 @@ impl Compiler {
             http_client
               .get(format!("https://api.github.com/repos/{}", next_contract.repo_name))
               .bearer_auth(options.github_api_key.clone().expect("Missing Github API key"))
-              .header("User-Agent", "VSC Blocks Contract Verifier")
+              .header("User-Agent", "Magi Blocks Contract Verifier")
               .header("X-GitHub-Api-Version", "2022-11-28")
               .send().await
           {
@@ -179,7 +179,7 @@ impl Compiler {
             http_client
               .get(format!("https://api.github.com/repos/{}/branches/{}", next_contract.repo_name, branch_name))
               .bearer_auth(options.github_api_key.clone().expect("Missing Github API key"))
-              .header("User-Agent", "VSC Blocks Contract Verifier")
+              .header("User-Agent", "Magi Blocks Contract Verifier")
               .header("X-GitHub-Api-Version", "2022-11-28")
               .send().await
           {

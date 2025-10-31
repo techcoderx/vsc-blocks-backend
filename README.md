@@ -1,6 +1,6 @@
-# VSC Blocks Backend
+# Magi Blocks Backend
 
-Backend server for [VSC Blocks](https://vsc.techcoderx.com). This is an extension of [go-vsc-node](https://github.com/vsc-eco/go-vsc-node) which provides the following services:
+Backend server for [Magi Blocks](https://vsc.techcoderx.com). This is an extension of [go-vsc-node](https://github.com/vsc-eco/go-vsc-node) which provides the following services:
 
 - Contract verifier
 - Network stats indexer
