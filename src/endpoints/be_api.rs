@@ -9,11 +9,7 @@ use crate::{
   config::config,
   constants::NETWORK_STATS_START_DATE,
   helpers::{ datetime::parse_date_str, db::{ get_props, get_witness_stats } },
-  types::{
-    hive::{ CustomJson, TxByHash },
-    server::{ Context, RespErr },
-    vsc::{ BridgeStats, UserStats, WitnessStat, WitnessStatResult },
-  },
+  types::{ hive::{ CustomJson, TxByHash }, server::{ Context, RespErr }, vsc::{ BridgeStats, UserStats, WitnessStatResult } },
 };
 
 #[get("")]
@@ -31,23 +27,6 @@ async fn props(ctx: web::Data<Context>) -> Result<HttpResponse, RespErr> {
 async fn witness_stats(path: web::Path<String>, ctx: web::Data<Context>) -> Result<HttpResponse, RespErr> {
   let user = path.into_inner();
   let stats = get_witness_stats(&ctx.db, user).await.map_err(|e| RespErr::DbErr { msg: e.to_string() })?;
-  Ok(HttpResponse::Ok().json(stats))
-}
-
-#[get("/witness/{username}/stats/many")]
-async fn get_witness_stats_many(path: web::Path<String>, ctx: web::Data<Context>) -> Result<HttpResponse, RespErr> {
-  let p = path.into_inner();
-  if p.len() == 0 {
-    return Err(RespErr::BadRequest { msg: String::from("Invalid username") });
-  }
-  let users = p.split(",").collect::<Vec<&str>>();
-  if p.len() > 1000 {
-    return Err(RespErr::BadRequest { msg: String::from("Max 1000 usernames allowed") });
-  }
-  let mut stats: Vec<WitnessStat> = Vec::new();
-  for user in users {
-    stats.push(get_witness_stats(&ctx.db, String::from(user)).await.map_err(|e| RespErr::DbErr { msg: e.to_string() })?);
-  }
   Ok(HttpResponse::Ok().json(stats))
 }
 
@@ -243,7 +222,7 @@ async fn get_tx_output(path: web::Path<String>, ctx: web::Data<Context>) -> Resu
     }
     Ok(HttpResponse::Ok().json(result))
   } else {
-    Err(RespErr::InternalErr { msg: String::from("L2 transaction outputs are currently WIP") })
+    Err(RespErr::BadRequest { msg: String::from("Offchain transactions are not supported in this method") })
   }
 }
 
