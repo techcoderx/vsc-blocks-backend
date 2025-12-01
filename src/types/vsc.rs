@@ -176,12 +176,12 @@ pub struct EpochBlocksInfo {
   pub total_votes: u64,
 }
 
-#[derive(Serialize, Deserialize, Clone)]
+#[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct BlockStat {
   pub size: u64,
 }
 
-#[derive(Serialize, Deserialize, Clone)]
+#[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct BlockHeaderRecord {
   pub id: String,
   pub block: String,
@@ -197,7 +197,7 @@ pub struct BlockHeaderRecord {
   pub be_info: Option<BlockIndexed>,
 }
 
-#[derive(Clone, Serialize, Deserialize)]
+#[derive(Clone, Serialize, Deserialize, Debug)]
 pub struct BlockIndexed {
   pub block_id: u32,
   pub epoch: u32,

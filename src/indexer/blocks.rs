@@ -65,7 +65,7 @@ impl BlockIndexer {
         let mut next_nums = (nums.0, nums.1);
         while let Some(b) = next_blocks.next().await {
           if b.is_err() {
-            error!("Failed to deserialize block header");
+            error!("Failed to deserialize block header: {}", b.unwrap_err().to_string());
             break 'mainloop;
           }
           let block = b.unwrap();

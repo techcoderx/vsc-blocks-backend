@@ -60,7 +60,7 @@ impl ElectionIndexer {
         let mut next_num = num;
         while let Some(ep) = next_epochs.next().await {
           if ep.is_err() {
-            error!("Failed to deserialize election");
+            error!("Failed to deserialize election: {}", ep.unwrap_err().to_string());
             break 'mainloop;
           }
           let epoch = ep.unwrap();
