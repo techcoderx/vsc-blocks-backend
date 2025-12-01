@@ -189,7 +189,7 @@ pub struct BlockHeaderRecord {
   pub merkle_root: String,
   pub proposer: String,
   pub sig_root: Option<String>,
-  pub signers: Option<String>,
+  pub signers: Vec<String>,
   pub slot_height: u32,
   pub start_block: u32,
   pub stats: BlockStat,
