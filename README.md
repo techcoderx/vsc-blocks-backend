@@ -22,15 +22,6 @@ Dump a sample config file to `config.toml`:
 ./vsc-blocks-backend --dump-config
 ```
 
-## Building compiler docker image
-
-### AssemblyScript
-
-```sh
-cd as_compiler
-docker build -t as-compiler .
-```
-
 ## License
 
 This project is dual licensed under the [MIT License](https://github.com/techcoderx/vsc-blocks-backend/blob/main/LICENSE-MIT) or [Apache License 2.0](https://github.com/techcoderx/vsc-blocks-backend/blob/main/LICENSE-APACHE).
