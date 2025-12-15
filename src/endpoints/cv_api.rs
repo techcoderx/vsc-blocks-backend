@@ -216,7 +216,7 @@ async fn verify_new(
   }
 
   // existing contract verification status check
-  match ctx.db.cv_contracts.find_one(doc! { "_id": &address }).await.map_err(|e| RespErr::DbErr { msg: e.to_string() })? {
+  match ctx.db.cv_contracts.find_one(doc! { "contract_id": &address }).await.map_err(|e| RespErr::DbErr { msg: e.to_string() })? {
     Some(cv) => {
       let is_fail = cv.status == "failed" || cv.status == "not match";
       if cv.status != "pending" && !is_fail {
@@ -227,11 +227,16 @@ async fn verify_new(
     }
     None => (),
   }
-  // other contracts identical bytecode that have been previously verified
-  match ctx.db.cv_contracts.find_one(doc! { "code": &contract.code }).await.map_err(|e| RespErr::DbErr { msg: e.to_string() })? {
+  // other contracts identical bytecode that have been previously verified or already verifying
+  match ctx.db.cv_contracts.find_one(doc! { "_id": &contract.code }).await.map_err(|e| RespErr::DbErr { msg: e.to_string() })? {
     Some(similar) => {
+      let is_fail = similar.status == "failed" || similar.status == "not match";
       if similar.status == CVStatus::Success.to_string() {
         return Err(RespErr::CvSimilarMatch);
+      } else if is_fail && similar.request_ts.to_chrono() + Duration::hours(12) > Utc::now() {
+        return Err(RespErr::CvRetryLater);
+      } else if similar.status == "queued" {
+        return Err(RespErr::BadRequest { msg: String::from("A similar contract is already queued for verification.") });
       }
     }
     None => (),
@@ -272,7 +277,7 @@ async fn verify_new(
   let tinygo_libs = tinygo_versions.get(&req_data.tinygo_version).unwrap().clone();
   ctx.db.cv_contracts.delete_one(doc! { "_id": &address }).await.map_err(|e| RespErr::DbErr { msg: e.to_string() })?;
   let new_cv = CVContract {
-    id: address.clone(),
+    contract_id: address.clone(),
     code: contract.code.clone(),
     verifier: match username.len() {
       0 => None,
@@ -312,7 +317,9 @@ async fn verify_new(
 #[get("/contract/{address}")]
 async fn contract_info(path: web::Path<String>, ctx: web::Data<Context>) -> Result<HttpResponse, RespErr> {
   let addr = path.into_inner();
-  let contract = ctx.db.cv_contracts.find_one(doc! { "_id": &addr }).await.map_err(|e| RespErr::DbErr { msg: e.to_string() })?;
+  let contract = ctx.db.cv_contracts
+    .find_one(doc! { "contract_id": &addr }).await
+    .map_err(|e| RespErr::DbErr { msg: e.to_string() })?;
   if contract.is_some() {
     let contract = contract.unwrap();
     let result = CVContractResult {
@@ -346,7 +353,7 @@ async fn contract_info(path: web::Path<String>, ctx: web::Data<Context>) -> Resu
   };
   match
     ctx.db.cv_contracts
-      .find_one(doc! { "code": &deployed_contract.code }).await
+      .find_one(doc! { "_id": &deployed_contract.code }).await
       .map_err(|e| RespErr::DbErr { msg: e.to_string() })?
   {
     Some(similar) => {
@@ -355,7 +362,7 @@ async fn contract_info(path: web::Path<String>, ctx: web::Data<Context>) -> Resu
           HttpResponse::Ok().json(CVContractResult {
             address: addr,
             code: similar.code,
-            similar_match: Some(similar.id),
+            similar_match: Some(similar.contract_id),
             verifier: similar.verifier,
             request_ts: similar.request_ts.to_chrono().format(TIMESTAMP_FORMAT).to_string(),
             verified_ts: similar.verified_ts.map(|t| t.to_chrono().format(TIMESTAMP_FORMAT).to_string()),

@@ -54,8 +54,8 @@ fn chown(path: &String, uid: usize, gid: usize) {
   let _ = Command::new("chown").arg("-R").arg(format!("{}:{}", uid, gid)).arg(path.clone()).status();
 }
 
-async fn update_status(db: &MongoDB, addr: &str, status: CVStatus) -> Result<UpdateResult, mongodb::error::Error> {
-  db.clone().cv_contracts.update_one(doc! { "_id": addr }, doc! { "$set": {"status": status.to_string() } }).await
+async fn update_status(db: &MongoDB, code: &str, status: CVStatus) -> Result<UpdateResult, mongodb::error::Error> {
+  db.clone().cv_contracts.update_one(doc! { "_id": code }, doc! { "$set": {"status": status.to_string() } }).await
 }
 
 /// Go contract compiler
@@ -126,8 +126,8 @@ impl Compiler {
           break;
         }
         let next_contract = next_contract.unwrap();
-        let next_addr: &str = &next_contract.id;
-        info!("Compiling contract {}", next_addr);
+        info!("Compiling contract {}", &next_contract.contract_id);
+        info!("Code: {}", &next_contract.code);
         let _ = delete_if_exists(go_options.src_dir.clone().as_str());
         let _ = create_dir_if_not_exists(go_options.src_dir.clone());
         if &next_contract.lang == "go" {
@@ -143,7 +143,7 @@ impl Compiler {
             Ok(r) => {
               if r.status() == 404 {
                 error!("Repository {} does not exist", next_contract.repo_name);
-                let _ = update_status(&db, &next_contract.id, CVStatus::Failed).await;
+                let _ = update_status(&db, &next_contract.code, CVStatus::Failed).await;
                 continue 'mainloop;
               } else if r.status() != 200 {
                 error!("Failed to fetch repository info from GitHub with status code {}", r.status());
@@ -153,13 +153,13 @@ impl Compiler {
               let i = r.json::<GithubRepoInfo>().await;
               if i.is_err() {
                 error!("Failed to parse repository info");
-                let _ = update_status(&db, &next_contract.id, CVStatus::Failed).await;
+                let _ = update_status(&db, &next_contract.code, CVStatus::Failed).await;
                 continue 'mainloop;
               }
               let i = i.unwrap();
               if i.size > 10240 {
                 error!("Repository is too large, size is {}", i.size);
-                let _ = update_status(&db, &next_contract.id, CVStatus::Failed).await;
+                let _ = update_status(&db, &next_contract.code, CVStatus::Failed).await;
                 continue 'mainloop;
               }
               i
@@ -186,7 +186,7 @@ impl Compiler {
             Ok(b) => {
               if b.status() == 404 {
                 error!("Branch {} does not exist", branch_name);
-                let _ = update_status(&db, &next_contract.id, CVStatus::Failed).await;
+                let _ = update_status(&db, &next_contract.code, CVStatus::Failed).await;
                 continue 'mainloop;
               } else if b.status() != 200 {
                 error!("Failed to fetch repository info from GitHub with status code {}", b.status());
@@ -196,7 +196,7 @@ impl Compiler {
               let b = b.json::<GithubBranchInfo>().await;
               if b.is_err() {
                 error!("Failed to parse branch info");
-                let _ = update_status(&db, &next_contract.id, CVStatus::Failed).await;
+                let _ = update_status(&db, &next_contract.code, CVStatus::Failed).await;
                 continue 'mainloop;
               }
               b.unwrap()
@@ -232,7 +232,7 @@ impl Compiler {
           chown(&go_options.src_dir, 1000, 1000);
           if checkout.is_err() {
             error!("Failed to checkout commit");
-            let _ = update_status(&db, &next_contract.id, CVStatus::Failed);
+            let _ = update_status(&db, &next_contract.code, CVStatus::Failed);
             continue 'mainloop;
           }
           let cont_conf = Config {
@@ -276,7 +276,7 @@ impl Compiler {
           let container = docker.create_container(Some(cont_opt), cont_conf).await.unwrap();
           let start_container = docker.start_container::<String>(&container.id, None).await;
           if start_container.is_err() {
-            let _ = update_status(&db, next_addr, CVStatus::Failed).await;
+            let _ = update_status(&db, &next_contract.code, CVStatus::Failed).await;
             debug!("Failed to start compiler: {}", start_container.unwrap_err().to_string());
             continue 'mainloop;
           }
@@ -287,7 +287,7 @@ impl Compiler {
             if status_code == 0 {
               let mut output = fs::read(format!("{}/build.wasm", go_options.output_dir));
               if output.is_err() {
-                let _ = update_status(&db, next_addr, CVStatus::Failed).await;
+                let _ = update_status(&db, &next_contract.code, CVStatus::Failed).await;
                 error!("build.wasm not found");
                 continue 'mainloop;
               }
@@ -318,7 +318,7 @@ impl Compiler {
                 output = fs::read(format!("{}/build-striped.wasm", go_options.output_dir));
                 if output.is_err() {
                   // this should not happen
-                  let _ = update_status(&db, next_addr, CVStatus::Failed).await;
+                  let _ = update_status(&db, &next_contract.code, CVStatus::Failed).await;
                   error!("build-striped.wasm not found");
                   continue 'mainloop;
                 }
@@ -332,7 +332,7 @@ impl Compiler {
                 .unwrap_or(None);
               if cid_match {
                 let _ = db.cv_contracts.update_one(
-                  doc! { "_id": next_contract.id },
+                  doc! { "_id": next_contract.code },
                   doc! { "$set": {
                     "status": CVStatus::Success.to_string(),
                     "verified_ts": bson::DateTime::from_chrono(Utc::now()),
@@ -342,15 +342,15 @@ impl Compiler {
                   }}
                 ).await;
               } else {
-                let _ = update_status(&db, next_addr, CVStatus::NotMatch).await;
+                let _ = update_status(&db, &next_contract.code, CVStatus::NotMatch).await;
               }
             } else {
               info!("Compilation failed with exit code {}", status_code);
-              let _ = update_status(&db, next_addr, CVStatus::Failed).await;
+              let _ = update_status(&db, &next_contract.code, CVStatus::Failed).await;
             }
           } else {
             info!("Compilation failed with unknown exit code");
-            let _ = update_status(&db, next_addr, CVStatus::Failed).await;
+            let _ = update_status(&db, &next_contract.code, CVStatus::Failed).await;
           }
           debug!("Deleting build artifacts");
           let _ = delete_if_exists(go_options.src_dir.clone().as_str());

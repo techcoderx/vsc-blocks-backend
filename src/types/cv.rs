@@ -36,8 +36,8 @@ pub struct CVTinyGoLibVersions {
 #[derive(Clone, Serialize, Deserialize)]
 pub struct CVContract {
   #[serde(rename = "_id")]
-  pub id: String,
   pub code: String,
+  pub contract_id: String,
   #[serde(skip_serializing_if = "Option::is_none")]
   pub verifier: Option<String>,
   pub repo_name: String,
