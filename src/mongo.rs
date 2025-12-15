@@ -86,10 +86,10 @@ impl MongoDB {
       .build();
     contracts_db.create_index(status_ts_index).await?;
 
-    let code_index = IndexModel::builder()
-      .keys(bson::doc! { "code": 1 })
+    let contract_id_idx = IndexModel::builder()
+      .keys(bson::doc! { "contract_id": 1 })
       .build();
-    contracts_db.create_index(code_index).await?;
+    contracts_db.create_index(contract_id_idx).await?;
 
     Ok(())
   }
