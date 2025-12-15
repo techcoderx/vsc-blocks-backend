@@ -229,7 +229,9 @@ impl Compiler {
               }
             })
           });
-          chown(&go_options.src_dir, 1000, 1000);
+          if options.fix_permissions.unwrap_or(false) {
+            chown(&go_options.src_dir, 1000, 1000);
+          }
           if checkout.is_err() {
             error!("Failed to checkout commit");
             let _ = update_status(&db, &next_contract.code, CVStatus::Failed);

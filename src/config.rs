@@ -31,6 +31,7 @@ pub struct CompilerConf {
   pub wasm_strip: String,
   pub wasm_tools: String,
   pub whitelist: Vec<String>,
+  pub fix_permissions: Option<bool>,
 }
 
 #[derive(Serialize, Deserialize, Clone)]
@@ -102,6 +103,7 @@ impl TomlConfig {
           wasm_strip: format!("wasm-strip"),
           wasm_tools: format!("wasm-tools"),
           whitelist: Vec::new(),
+          fix_permissions: Some(false),
         }),
         gocompiler: GoCompilerConf {
           src_dir: format!("{}/go_compiler", current_dir().unwrap().to_str().unwrap()),

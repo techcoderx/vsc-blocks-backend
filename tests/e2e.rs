@@ -85,6 +85,7 @@ async fn test_e2e_verify_contract_go() {
       wasm_strip: format!("/usr/local/bin/wasm-strip"),
       wasm_tools: format!("/usr/local/bin/wasm-tools"),
       whitelist: Vec::new(),
+      fix_permissions: Some(false),
     })
   );
   let server_ctx = Context { db: db, compiler: Some(compiler), http_client: http_client.clone() };
