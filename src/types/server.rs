@@ -30,7 +30,7 @@ pub enum RespErr {
   #[display("Invalid Wasm strip tool name")] CvInvalidWasmStripTool,
   #[display("Invalid TinyGo version")] CvInvalidTinyGoVersion,
   #[display("Verification retry is only allowed 12 hours after the previous request time")] CvRetryLater,
-  #[display("Another contract with exact bytecode was already verified")] CvSimilarMatch,
+  #[display("A similar contract was already verified")] CvSimilarMatch,
   #[display("{msg}")] InternalErr {
     msg: String,
   },

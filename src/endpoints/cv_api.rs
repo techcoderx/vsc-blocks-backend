@@ -214,29 +214,24 @@ async fn verify_new(
       return Err(RespErr::CvNotAuthorized);
     }
   }
-
-  // existing contract verification status check
-  match ctx.db.cv_contracts.find_one(doc! { "contract_id": &address }).await.map_err(|e| RespErr::DbErr { msg: e.to_string() })? {
-    Some(cv) => {
-      let is_fail = cv.status == "failed" || cv.status == "not match";
-      if cv.status != "pending" && !is_fail {
-        return Err(RespErr::BadRequest { msg: String::from("Contract is already verified or being verified.") });
-      } else if is_fail && cv.request_ts.to_chrono() + Duration::hours(12) > Utc::now() {
-        return Err(RespErr::CvRetryLater);
-      }
-    }
-    None => (),
-  }
-  // other contracts identical bytecode that have been previously verified or already verifying
+  // check if any contracts including this with identical bytecode that have been previously verified or already verifying
   match ctx.db.cv_contracts.find_one(doc! { "_id": &contract.code }).await.map_err(|e| RespErr::DbErr { msg: e.to_string() })? {
     Some(similar) => {
       let is_fail = similar.status == "failed" || similar.status == "not match";
       if similar.status == CVStatus::Success.to_string() {
-        return Err(RespErr::CvSimilarMatch);
+        if &similar.contract_id == &address {
+          return Err(RespErr::BadRequest { msg: String::from("Contract is already verified") });
+        } else {
+          return Err(RespErr::CvSimilarMatch);
+        }
       } else if is_fail && similar.request_ts.to_chrono() + Duration::hours(12) > Utc::now() {
         return Err(RespErr::CvRetryLater);
       } else if similar.status == "queued" {
-        return Err(RespErr::BadRequest { msg: String::from("A similar contract is already queued for verification.") });
+        if &similar.contract_id == &address {
+          return Err(RespErr::BadRequest { msg: String::from("Contract is already queued for verification.") });
+        } else {
+          return Err(RespErr::BadRequest { msg: String::from("A similar contract is already queued for verification.") });
+        }
       }
     }
     None => (),
@@ -317,32 +312,6 @@ async fn verify_new(
 #[get("/contract/{address}")]
 async fn contract_info(path: web::Path<String>, ctx: web::Data<Context>) -> Result<HttpResponse, RespErr> {
   let addr = path.into_inner();
-  let contract = ctx.db.cv_contracts
-    .find_one(doc! { "contract_id": &addr }).await
-    .map_err(|e| RespErr::DbErr { msg: e.to_string() })?;
-  if contract.is_some() {
-    let contract = contract.unwrap();
-    let result = CVContractResult {
-      address: addr,
-      code: contract.code,
-      similar_match: None,
-      verifier: contract.verifier,
-      request_ts: contract.request_ts.to_chrono().format(TIMESTAMP_FORMAT).to_string(),
-      verified_ts: contract.verified_ts.map(|t| t.to_chrono().format(TIMESTAMP_FORMAT).to_string()),
-      status: contract.status.clone(),
-      repo_name: contract.repo_name,
-      repo_branch: contract.repo_branch,
-      git_commit: contract.git_commit,
-      tinygo_version: contract.tinygo_version,
-      go_version: contract.go_version,
-      llvm_version: contract.llvm_version,
-      strip_tool: contract.strip_tool,
-      exports: contract.exports,
-      license: contract.license,
-      lang: contract.lang.clone(),
-    };
-    return Ok(HttpResponse::Ok().json(result));
-  }
   let deployed_contract = match
     ctx.db.contracts.find_one(doc! { "id": &addr }).await.map_err(|e| RespErr::DbErr { msg: e.to_string() })?
   {
@@ -357,29 +326,27 @@ async fn contract_info(path: web::Path<String>, ctx: web::Data<Context>) -> Resu
       .map_err(|e| RespErr::DbErr { msg: e.to_string() })?
   {
     Some(similar) => {
-      if similar.status == CVStatus::Success.to_string() {
-        return Ok(
-          HttpResponse::Ok().json(CVContractResult {
-            address: addr,
-            code: similar.code,
-            similar_match: Some(similar.contract_id),
-            verifier: similar.verifier,
-            request_ts: similar.request_ts.to_chrono().format(TIMESTAMP_FORMAT).to_string(),
-            verified_ts: similar.verified_ts.map(|t| t.to_chrono().format(TIMESTAMP_FORMAT).to_string()),
-            status: similar.status.clone(),
-            repo_name: similar.repo_name,
-            repo_branch: similar.repo_branch,
-            git_commit: similar.git_commit,
-            tinygo_version: similar.tinygo_version,
-            go_version: similar.go_version,
-            llvm_version: similar.llvm_version,
-            strip_tool: similar.strip_tool,
-            exports: similar.exports,
-            license: similar.license,
-            lang: similar.lang.clone(),
-          })
-        );
-      }
+      return Ok(
+        HttpResponse::Ok().json(CVContractResult {
+          address: addr,
+          code: similar.code,
+          similar_match: Some(similar.contract_id),
+          verifier: similar.verifier,
+          request_ts: similar.request_ts.to_chrono().format(TIMESTAMP_FORMAT).to_string(),
+          verified_ts: similar.verified_ts.map(|t| t.to_chrono().format(TIMESTAMP_FORMAT).to_string()),
+          status: similar.status.clone(),
+          repo_name: similar.repo_name,
+          repo_branch: similar.repo_branch,
+          git_commit: similar.git_commit,
+          tinygo_version: similar.tinygo_version,
+          go_version: similar.go_version,
+          llvm_version: similar.llvm_version,
+          strip_tool: similar.strip_tool,
+          exports: similar.exports,
+          license: similar.license,
+          lang: similar.lang.clone(),
+        })
+      );
     }
     None => (),
   }
