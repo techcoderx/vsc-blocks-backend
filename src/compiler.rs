@@ -4,7 +4,7 @@ use mongodb::options::FindOneOptions;
 use mongodb::results::UpdateResult;
 use tokio::sync::Mutex;
 use bollard::Docker;
-use bollard::container::{ Config, CreateContainerOptions, WaitContainerOptions };
+use bollard::container::{ Config, CreateContainerOptions, WaitContainerOptions, LogsOptions };
 use bollard::models::{ HostConfig, ContainerWaitResponse };
 use futures_util::StreamExt;
 use chrono::Utc;
@@ -276,16 +276,46 @@ impl Compiler {
             platform: None,
           };
           let container = docker.create_container(Some(cont_opt), cont_conf).await.unwrap();
+
+          // Start streaming logs while container is running
+          let log_stream = docker.logs::<String>(
+            cont_name,
+            Some(LogsOptions::<String> {
+              follow: true,
+              stdout: true,
+              stderr: true,
+              ..Default::default()
+            })
+          );
+
+          // Create a task to handle log streaming
+          let log_task = tokio::spawn({
+            let log_stream = log_stream;
+            async move {
+              tokio::pin!(log_stream);
+              while let Some(log_result) = log_stream.next().await {
+                match log_result {
+                  Ok(log_data) => debug!("Container logs: {}", log_data),
+                  Err(e) => error!("Failed to read container log: {}", e),
+                }
+              }
+            }
+          });
+
           let start_container = docker.start_container::<String>(&container.id, None).await;
           if start_container.is_err() {
             let _ = update_status(&db, &next_contract.code, CVStatus::Failed).await;
             debug!("Failed to start compiler: {}", start_container.unwrap_err().to_string());
             continue 'mainloop;
           }
+
           // Wait for the container to finish and retrieve the exit code
           let mut stream = docker.wait_container(cont_name, Some(WaitContainerOptions { condition: "not-running" }));
           if let Some(Ok(ContainerWaitResponse { status_code, .. })) = stream.next().await {
             info!("Compiler exited with status code: {}", status_code);
+
+            // Wait for log streaming to complete
+            let _ = log_task.await;
             if status_code == 0 {
               let mut output = fs::read(format!("{}/build.wasm", go_options.output_dir));
               if output.is_err() {
