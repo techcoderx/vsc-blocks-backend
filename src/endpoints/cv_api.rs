@@ -270,7 +270,7 @@ async fn verify_new(
     return Err(RespErr::CvInvalidTinyGoVersion);
   }
   let tinygo_libs = tinygo_versions.get(&req_data.tinygo_version).unwrap().clone();
-  ctx.db.cv_contracts.delete_one(doc! { "_id": &address }).await.map_err(|e| RespErr::DbErr { msg: e.to_string() })?;
+  ctx.db.cv_contracts.delete_one(doc! { "_id": &contract.code }).await.map_err(|e| RespErr::DbErr { msg: e.to_string() })?;
   let new_cv = CVContract {
     contract_id: address.clone(),
     code: contract.code.clone(),
