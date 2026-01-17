@@ -225,7 +225,7 @@ pub struct TransactionRecord {
   // #[serde(rename = "first_seen")]
   // pub first_seen: DateTime<Utc>,
   pub ops: Vec<OpInfo>,
-  pub output: Option<Output>,
+  pub output: Option<Vec<Output>>,
   pub ledger: Vec<LedgerOpLog>,
 }
 
@@ -239,7 +239,7 @@ pub struct OpInfo {
 pub struct Output {
   #[serde(rename = "id")]
   pub id: String,
-  pub index: i64,
+  pub index: Vec<i64>,
 }
 
 #[derive(Serialize)]
