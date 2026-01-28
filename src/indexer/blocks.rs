@@ -80,7 +80,7 @@ impl BlockIndexer {
           }
           let tx = match tx.unwrap().json::<TxByHash<CustomJson>>().await {
             Err(e) => {
-              error!("{}", e.to_string());
+              error!("{}, {}", e.to_string(), block.id.clone());
               sleep(Duration::from_secs(60)).await;
               continue 'mainloop;
             }
