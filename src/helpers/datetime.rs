@@ -12,11 +12,12 @@ pub fn format_date(date: u32, month: u32, year: i32) -> String {
 
 #[cfg(test)]
 mod tests {
-  use crate::{ constants::NETWORK_STATS_START_DATE, helpers::datetime::* };
+  use crate::{ constants::testnet_const, helpers::datetime::* };
 
   #[test]
   fn test_parse_start_date() {
-    let parsed = parse_date_str(NETWORK_STATS_START_DATE);
+    // let conf = testnet_const();
+    let parsed = parse_date_str(&testnet_const().start_date);
     assert_eq!(parsed.is_ok(), true);
   }
 }

@@ -5,7 +5,7 @@ use chrono::{ Datelike, Days };
 use log::{ error, info };
 use crate::{
   config::config,
-  constants::NETWORK_STATS_START_DATE,
+  constants::from_config,
   helpers::{
     datetime::*,
     db::{ get_last_processed_block_ts, get_members_at_l1_block, get_total_deposits, get_total_withdrawals },
@@ -33,6 +33,7 @@ impl NetworkStatsIndexer {
     let http_client = self.http_client.clone();
     let db = self.db.clone();
     let running = Arc::clone(&self.is_running);
+    let start_date = from_config().start_date.clone();
 
     tokio::spawn(async move {
       info!("Begin indexing daily network stats");
@@ -47,7 +48,7 @@ impl NetworkStatsIndexer {
       }
       let mut last_date = match sync_state.unwrap() {
         Some(state) => state.network_stats_date.to_chrono(),
-        None => parse_date_str(NETWORK_STATS_START_DATE).expect("Failed to parse stats start date"),
+        None => parse_date_str(&start_date).expect("Failed to parse stats start date"),
       };
       'mainloop: loop {
         let r = running.read().await;

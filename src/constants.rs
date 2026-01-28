@@ -1,11 +1,39 @@
+use crate::config::config;
+
 // bridge tx count tally interval (in seconds)
 pub static BRIDGE_TXS_TALLY_INTERVAL: u64 = 600;
 
-// Magi Blocks URL for Discord bot
-pub static VSC_BLOCKS_HOME: &str = "https://vsc.techcoderx.com";
+#[derive(Clone)]
+pub struct NetworkConsts {
+  pub name: String,
+  pub magi_explorer_url: String,
+  pub l1_explorer_url: String,
+  pub start_date: String,
+}
 
-// L1 Block explorer URL for Discord bot
-pub static L1_EXPLORER_URL: &str = "https://hivehub.dev";
+pub fn mainnet_const() -> NetworkConsts {
+  return NetworkConsts {
+    name: format!("mainnet"),
+    magi_explorer_url: format!("https://vsc.techcoderx.com"),
+    l1_explorer_url: format!("https://hivehub.dev"),
+    start_date: format!("2025-03-31"),
+  };
+}
 
-// Daily network stats indexer
-pub static NETWORK_STATS_START_DATE: &str = "2025-03-31";
+pub fn testnet_const() -> NetworkConsts {
+  return NetworkConsts {
+    name: format!("testnet"),
+    magi_explorer_url: format!("https://testnet.magi.techcoderx.com"),
+    l1_explorer_url: format!("https://testnet.techcoderx.com/explorer"),
+    start_date: format!("2026-01-22"),
+  };
+}
+
+pub fn from_config() -> NetworkConsts {
+  let net = config.network.clone().unwrap_or(format!("mainnet"));
+  match net.as_str() {
+    "mainnet" => mainnet_const(),
+    "testnet" => testnet_const(),
+    _ => panic!("invalid network"),
+  }
+}

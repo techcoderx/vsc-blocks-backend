@@ -59,6 +59,7 @@ pub struct DiscordConf {
 #[derive(Serialize, Deserialize)]
 pub struct TomlConfig {
   pub log_level: Option<String>,
+  pub network: Option<String>,
   pub mongo_url: String,
   pub hive_rpc: String,
   pub be_indexer: Option<bool>,
@@ -87,6 +88,7 @@ impl TomlConfig {
     if !Path::new(&filepath).exists() {
       let default_conf = TomlConfig {
         log_level: Some(String::from("info")),
+        network: Some(format!("mainnet")),
         mongo_url: String::from("mongodb://localhost:27017"),
         hive_rpc: String::from("https://techcoderx.com"),
         be_indexer: None,

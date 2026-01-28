@@ -2,19 +2,19 @@ use std::ops::{ Div, Sub };
 
 use crate::{
   config::{ config, DiscordConf },
-  constants::{ L1_EXPLORER_URL, VSC_BLOCKS_HOME },
+  constants::NetworkConsts,
   helpers::db::{ get_props, get_user_balance, get_user_cons_unstaking, get_witness, get_witness_stats },
   mongo::MongoDB,
-  types::vsc::ElectionMember,
+  types::{ hive::DgpAtBlock, vsc::ElectionMember },
 };
 use log::info;
 use formatter::thousand_separator;
 use mongodb::bson::doc;
 use tokio;
 use poise::{ serenity_prelude::{ self, CreateEmbed, Timestamp }, CreateReply };
-use vsc_blocks_backend::types::hive::DgpAtBlock;
 
 struct Data {
+  pub consts: NetworkConsts,
   pub db: MongoDB,
   pub http_client: reqwest::Client,
 } // User data, which is stored and accessible in all command invocations
@@ -29,6 +29,14 @@ fn time(timestamp: String, style: char) -> String {
   format!("<t:{}:{style}>", Timestamp::parse(&ts_str).unwrap().timestamp())
 }
 
+fn l1_be_block_route(net_name: String) -> String {
+  format!("{}", match net_name.as_str() {
+    "mainnet" => "b",
+    "testnet" => "block",
+    _ => "",
+  })
+}
+
 #[poise::command(
   slash_command,
   name_localized("en-US", "stats"),
@@ -39,7 +47,7 @@ async fn stats(ctx: Context<'_>) -> Result<(), Error> {
   let props = get_props(&ctx.data().db).await?;
   let embed = CreateEmbed::new()
     .title("Magi Network Info")
-    .url(VSC_BLOCKS_HOME)
+    .url(&ctx.data().consts.magi_explorer_url)
     .fields(
       vec![
         ("Hive Block Height", thousand_separator(props.last_processed_block), true),
@@ -69,9 +77,10 @@ async fn witness(
   }
   let stats = get_witness_stats(&ctx.data().db, username.clone()).await?;
   let wit = wit_info.unwrap();
+  let magi_be_url = ctx.data().consts.magi_explorer_url.clone();
   let embed = CreateEmbed::new()
     .title("Magi Witness Info")
-    .url(format!("{}/address/hive:{}/witness", VSC_BLOCKS_HOME, username.clone()))
+    .url(format!("{}/address/hive:{}/witness", magi_be_url, username.clone()))
     .fields(
       vec![
         ("Username", username, true),
@@ -82,14 +91,14 @@ async fn witness(
         (
           "Last Block",
           stats.last_block
-            .map(|v| format!("[{}]({}/block/{})", thousand_separator(v), VSC_BLOCKS_HOME, v))
+            .map(|v| format!("[{}]({}/block/{})", thousand_separator(v), magi_be_url, v))
             .unwrap_or(String::from("N/A")),
           true,
         ),
         (
           "Last Epoch",
           stats.last_epoch
-            .map(|v| format!("[{}]({}/epoch/{})", thousand_separator(v), VSC_BLOCKS_HOME, v))
+            .map(|v| format!("[{}]({}/epoch/{})", thousand_separator(v), magi_be_url, v))
             .unwrap_or(String::from("N/A")),
           true,
         )
@@ -119,9 +128,10 @@ async fn epoch(ctx: Context<'_>, #[description = "Magi epoch number"] #[min = 0]
     members.truncate(40);
     members.push(ElectionMember { account: format!("..."), key: format!("") });
   }
+  let magi_be_url = ctx.data().consts.magi_explorer_url.clone();
   let embed = CreateEmbed::new()
     .title("Magi Epoch")
-    .url(format!("{}/epoch/{}", VSC_BLOCKS_HOME, epoch_num))
+    .url(format!("{}/epoch/{}", magi_be_url, epoch_num))
     .fields(
       vec![
         ("Epoch", thousand_separator(epoch_num), true),
@@ -133,7 +143,17 @@ async fn epoch(ctx: Context<'_>, #[description = "Magi epoch number"] #[min = 0]
             .unwrap_or(String::from("*Indexing...*")),
           true,
         ),
-        ("L1 Block", format!("[{}]({}/b/{})", thousand_separator(epoch.block_height), L1_EXPLORER_URL, epoch.block_height), true),
+        (
+          "L1 Block",
+          format!(
+            "[{}]({}/{}/{})",
+            thousand_separator(epoch.block_height),
+            &ctx.data().consts.l1_explorer_url,
+            l1_be_block_route(ctx.data().consts.name.clone()),
+            epoch.block_height
+          ),
+          true,
+        ),
         (
           &format!("Elected Members ({})", epoch.members.len()),
           members
@@ -144,7 +164,7 @@ async fn epoch(ctx: Context<'_>, #[description = "Magi epoch number"] #[min = 0]
           false,
         ),
         ("Election Data CID", epoch.data, false),
-        ("Proposed in Tx", format!("[{}]({}/tx/{})", epoch.tx_id, VSC_BLOCKS_HOME, epoch.tx_id), false),
+        ("Proposed in Tx", format!("[{}]({}/tx/{})", epoch.tx_id, magi_be_url, epoch.tx_id), false),
         ("Proposer", epoch.proposer, true),
         (
           "Participation",
@@ -174,20 +194,27 @@ async fn block(ctx: Context<'_>, #[description = "Magi block number"] #[min = 1]
     return Ok(());
   }
   let block = block.unwrap();
+  let magi_be_url = ctx.data().consts.magi_explorer_url.clone();
   let embed = CreateEmbed::new()
     .title("Magi Block")
-    .url(format!("{}/block/{}", VSC_BLOCKS_HOME, block_num))
+    .url(format!("{}/block/{}", magi_be_url, block_num))
     .fields(
       vec![
         ("Block Number", thousand_separator(block_num), true),
         ("Timestamp", time(block.ts.clone(), 'f'), true),
         (
           "Slot Height",
-          format!("[{}]({}/b/{})", thousand_separator(block.slot_height), L1_EXPLORER_URL, block.slot_height),
+          format!(
+            "[{}]({}/{}/{})",
+            thousand_separator(block.slot_height),
+            &ctx.data().consts.l1_explorer_url,
+            l1_be_block_route(ctx.data().consts.name.clone()),
+            block.slot_height
+          ),
           true,
         ),
         ("Block CID", block.block, false),
-        ("Proposed In Tx", format!("[{}]({}/tx/{})", block.id, VSC_BLOCKS_HOME, block.id), false),
+        ("Proposed In Tx", format!("[{}]({}/tx/{})", block.id, magi_be_url, block.id), false),
         ("Proposer", block.proposer, true),
         (
           "Participation",
@@ -221,9 +248,10 @@ async fn balance(
   ctx.defer().await?;
   let bal = get_user_balance(&ctx.data().db, address.clone()).await?;
   let cons_unstaking = get_user_cons_unstaking(&ctx.data().db, address.clone()).await?;
+  let magi_be_url = ctx.data().consts.magi_explorer_url.clone();
   let embed = CreateEmbed::new()
     .title("Magi Address Balance")
-    .url(format!("{}/address/{}", VSC_BLOCKS_HOME, &address))
+    .url(format!("{}/address/{}", magi_be_url, &address))
     .fields(
       vec![
         ("Address", &address, false),
@@ -274,9 +302,10 @@ async fn tx(
     .http_client.get(format!("{}/hafah-api/global-state?block-num={}", config.hive_rpc, trx.anchored_height))
     .send().await?;
   let dgp = dgp_req.json::<DgpAtBlock>().await?;
+  let magi_be_url = ctx.data().consts.magi_explorer_url.clone();
   let embed = CreateEmbed::new()
     .title("Magi Transaction")
-    .url(format!("{}/tx/{}", VSC_BLOCKS_HOME, tx_id))
+    .url(format!("{}/tx/{}", magi_be_url, tx_id))
     .fields(
       vec![
         ("Transaction ID", tx_id, false),
@@ -297,18 +326,20 @@ async fn tx(
 #[derive(Clone)]
 pub struct DiscordBot {
   pub conf: DiscordConf,
+  pub consts: NetworkConsts,
   pub db: MongoDB,
   pub http_client: reqwest::Client,
 }
 
 impl DiscordBot {
-  pub fn init(conf: &DiscordConf, db: &MongoDB, http_client: &reqwest::Client) -> DiscordBot {
-    return DiscordBot { conf: conf.clone(), db: db.clone(), http_client: http_client.clone() };
+  pub fn init(conf: &DiscordConf, consts: &NetworkConsts, db: &MongoDB, http_client: &reqwest::Client) -> DiscordBot {
+    return DiscordBot { conf: conf.clone(), consts: consts.clone(), db: db.clone(), http_client: http_client.clone() };
   }
 
   pub fn start(&self) {
     let token = self.conf.token.clone();
     let intents = serenity_prelude::GatewayIntents::non_privileged();
+    let consts = self.consts.clone();
     let db = self.db.clone();
     let http_client = self.http_client.clone();
     let framework = poise::Framework
@@ -327,7 +358,7 @@ impl DiscordBot {
           //   http.delete_global_command(cmd.id.into()).await?;
           // }
           poise::builtins::register_globally(ctx, &framework.options().commands).await?;
-          Ok(Data { db, http_client })
+          Ok(Data { consts, db, http_client })
         })
       })
       .build();

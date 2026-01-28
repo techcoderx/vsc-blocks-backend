@@ -7,7 +7,7 @@ use serde_json::{ json, Value };
 use std::cmp::{ max, min };
 use crate::{
   config::config,
-  constants::NETWORK_STATS_START_DATE,
+  constants::from_config,
   helpers::{ datetime::parse_date_str, db::{ get_props, get_witness_stats } },
   types::{ hive::{ CustomJson, TxByHash }, server::{ Context, RespErr }, vsc::{ BridgeStats, UserStats, WitnessStatResult } },
 };
@@ -289,7 +289,7 @@ async fn network_stats(params: web::Query<NetworkStatsOpts>, ctx: web::Data<Cont
   let from_date = params.from
     .clone()
     .map(|d| parse_date_str(&d))
-    .unwrap_or(parse_date_str(NETWORK_STATS_START_DATE))
+    .unwrap_or(parse_date_str(&from_config().start_date))
     .map_err(|_| RespErr::BadRequest { msg: String::from("Invalid from date") })?;
   let to_date = params.to
     .clone()
