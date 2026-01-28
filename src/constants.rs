@@ -25,7 +25,7 @@ pub fn testnet_const() -> NetworkConsts {
     name: format!("testnet"),
     magi_explorer_url: format!("https://testnet.magi.techcoderx.com"),
     l1_explorer_url: format!("https://testnet.techcoderx.com/explorer"),
-    start_date: format!("2026-01-22"),
+    start_date: format!("2026-01-24"),
   };
 }
 
