@@ -1,22 +1,25 @@
 use mongodb::{ options::ClientOptions, Client, Collection, IndexModel };
 use std::error::Error;
 use log::info;
-use crate::types::{
-  cv::CVContract,
-  vsc::{
-    BlockHeaderRecord,
-    BridgeStats,
-    Contract,
-    DailyStats,
-    ElectionResultRecord,
-    HiveBlocksSyncState,
-    IndexerState,
-    Ledger,
-    LedgerActions,
-    LedgerBalance,
-    TransactionRecord,
-    WitnessStat,
-    Witnesses,
+use crate::{
+  config::DbConf,
+  types::{
+    cv::CVContract,
+    vsc::{
+      BlockHeaderRecord,
+      BridgeStats,
+      Contract,
+      DailyStats,
+      ElectionResultRecord,
+      HiveBlocksSyncState,
+      IndexerState,
+      Ledger,
+      LedgerActions,
+      LedgerBalance,
+      TransactionRecord,
+      WitnessStat,
+      Witnesses,
+    },
   },
 };
 
@@ -44,12 +47,12 @@ pub struct MongoDB {
 }
 
 impl MongoDB {
-  pub async fn init(url: String) -> Result<MongoDB, Box<dyn Error>> {
-    let client_options = ClientOptions::parse(url).await?;
+  pub async fn init(db_conf: &DbConf) -> Result<MongoDB, Box<dyn Error>> {
+    let client_options = ClientOptions::parse(&db_conf.mongo_url).await?;
     let client = Client::with_options(client_options)?;
-    let db = client.database("go-vsc");
-    let db2 = client.database("vsc2");
-    let db3 = client.database("vsc-cv");
+    let db = client.database(&db_conf.magi_db_name);
+    let db2 = client.database(&db_conf.be_db_name);
+    let db3 = client.database(&db_conf.cv_db_name);
     let cv_contracts: Collection<CVContract> = db3.collection("contracts");
     let is_setup = db3.list_collection_names().await?.contains(&String::from("contracts"));
     if !is_setup {

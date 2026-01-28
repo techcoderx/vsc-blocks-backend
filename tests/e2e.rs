@@ -4,7 +4,7 @@ use actix_web::{ middleware::NormalizePath, test, web, App };
 use std::{ collections::HashSet, env, time::{ Instant, Duration } };
 use vsc_blocks_backend::{
   compiler::Compiler,
-  config::{ CompilerConf, GoCompilerConf },
+  config::{ CompilerConf, DbConf, GoCompilerConf },
   endpoints::cv_api,
   mongo::MongoDB,
   types::{ server::Context, vsc::Contract },
@@ -39,7 +39,14 @@ struct CVResp {
 
 async fn setup_db() -> MongoDB {
   // connect and drop existing db
-  let db = MongoDB::init(String::from("mongodb://127.0.0.1:27017")).await.expect("failed to setup mongodb database");
+  let db = MongoDB::init(
+    &(DbConf {
+      mongo_url: format!("mongodb://127.0.0.1:27017"),
+      magi_db_name: format!("mbb-e2e"),
+      be_db_name: format!("mbb-e2e-be"),
+      cv_db_name: format!("mbb-e2e-cv"),
+    })
+  ).await.expect("failed to setup mongodb database");
   db.contracts.drop().await.expect("failed to drop contracts collection");
   db.cv_contracts.drop().await.expect("failed to drop cv contracts collection");
   // db.setup().await.expect("Failed to setup cv database");

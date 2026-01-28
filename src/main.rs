@@ -44,7 +44,7 @@ async fn main() -> std::io::Result<()> {
     .default_format()
     .init();
   info!("Version: {}", env!("CARGO_PKG_VERSION"));
-  let db = match mongo::MongoDB::init(config.mongo_url.clone()).await {
+  let db = match mongo::MongoDB::init(&config.db).await {
     Ok(d) => d,
     Err(e) => {
       error!("Failed to initialize database: {}", e.to_string());

@@ -56,11 +56,19 @@ pub struct DiscordConf {
   pub token: String,
 }
 
+#[derive(Serialize, Deserialize, Clone)]
+pub struct DbConf {
+  pub mongo_url: String,
+  pub magi_db_name: String,
+  pub be_db_name: String,
+  pub cv_db_name: String,
+}
+
 #[derive(Serialize, Deserialize)]
 pub struct TomlConfig {
   pub log_level: Option<String>,
   pub network: Option<String>,
-  pub mongo_url: String,
+  pub db: DbConf,
   pub hive_rpc: String,
   pub be_indexer: Option<bool>,
   pub auth: AuthConf,
@@ -89,7 +97,12 @@ impl TomlConfig {
       let default_conf = TomlConfig {
         log_level: Some(String::from("info")),
         network: Some(format!("mainnet")),
-        mongo_url: String::from("mongodb://localhost:27017"),
+        db: DbConf {
+          mongo_url: format!("mongodb://localhost:27017"),
+          magi_db_name: format!("go-vsc"),
+          be_db_name: format!("vsc2"),
+          cv_db_name: format!("vsc-cv"),
+        },
         hive_rpc: String::from("https://techcoderx.com"),
         be_indexer: None,
         auth: AuthConf {
