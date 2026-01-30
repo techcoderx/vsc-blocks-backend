@@ -130,5 +130,13 @@ lazy_static! {
         img_digest: format!("sha256:0e51d243c1b84ec650f2dcd1cce3a09bb09730e1134771aeace2240ade4b32f5")
       },
     ),
+    (
+      format!("0.40.1"),
+      CVTinyGoLibVersions {
+        go: format!("1.25.5"),
+        llvm: format!("20.1.1"),
+        img_digest: format!("sha256:89a77cc87b191399077be51a295d1d29569314931f334b2730427d7ed3a2b18e")
+      },
+    ),
   ]);
 }
