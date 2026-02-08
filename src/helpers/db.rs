@@ -29,7 +29,7 @@ pub async fn get_props(db: &MongoDB) -> Result<Props, Error> {
     .transpose()?
     .map(|d| d.get_i32("total").unwrap_or(0))
     .unwrap_or(0);
-  let contracts = db.contracts.estimated_document_count().await?;
+  let contracts = db.contracts.count_documents(doc! { "latest": true }).await?;
   let epoch = db.elections.estimated_document_count().await?;
   let block_count = db.blocks.estimated_document_count().await?;
   let last_l1_block = match db.l1_blocks.find_one(doc! { "type": "metadata" }).await? {
