@@ -3,7 +3,7 @@ use chrono::{ DateTime, NaiveDateTime, Utc };
 use serde::Serialize;
 use futures_util::StreamExt;
 use std::error::Error as Error2;
-use mongodb::{ bson::{ doc, Bson }, error::Error, options::FindOneOptions };
+use mongodb::{ bson::{ doc, Bson, Document }, error::Error, options::FindOneOptions };
 
 #[derive(Clone, Serialize)]
 pub struct Props {
@@ -172,4 +172,15 @@ pub async fn get_last_processed_block_ts(
     .send().await?;
   let current_state = current_state.json::<DgpAtBlock>().await?;
   Ok((current_state.block_num, NaiveDateTime::parse_from_str(&current_state.created_at, "%Y-%m-%dT%H:%M:%S")?.and_utc()))
+}
+
+pub fn apply_block_range(filter: Document, bh_field: &str, from_blk: Option<i64>, to_blk: Option<i64>) -> Document {
+  let mut filter = filter;
+  if let Some(from) = from_blk {
+    filter.insert(bh_field, doc! { "$gte": from });
+  }
+  if let Some(to) = to_blk {
+    filter.insert(bh_field, doc! { "$lte": to });
+  }
+  filter
 }

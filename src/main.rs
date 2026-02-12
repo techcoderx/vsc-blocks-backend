@@ -106,6 +106,7 @@ async fn main() -> std::io::Result<()> {
           .service(be_api::get_block)
           .service(be_api::get_tx_output)
           .service(be_api::bridge_stats)
+          .service(be_api::addr_stat)
           .service(be_api::addr_stats)
           .service(be_api::search)
           .service(be_api::network_stats)

@@ -8,7 +8,7 @@ use std::cmp::{ max, min };
 use crate::{
   config::config,
   constants::from_config,
-  helpers::{ datetime::parse_date_str, db::{ get_props, get_witness_stats } },
+  helpers::{ datetime::parse_date_str, db::{ apply_block_range, get_props, get_witness_stats } },
   types::{ hive::{ CustomJson, TxByHash }, server::{ Context, RespErr }, vsc::{ BridgeStats, UserStats, WitnessStatResult } },
 };
 
@@ -239,7 +239,9 @@ async fn bridge_stats(ctx: web::Data<Context>) -> Result<HttpResponse, RespErr> 
 async fn addr_stats(path: web::Path<String>, ctx: web::Data<Context>) -> Result<HttpResponse, RespErr> {
   let user = path.into_inner();
   let txs = ctx.db.tx_pool
-    .count_documents(doc! { "$or": [{"required_auths": &user }, {"required_posting_auths": &user}, {"data.to": &user}] }).await
+    .count_documents(
+      doc! { "$or": [{"required_auths": &user }, {"required_posting_auths": &user}, {"ops.data.to": &user}] }
+    ).await
     .map_err(|e| RespErr::DbErr { msg: e.to_string() })?;
   let ledger_txs = ctx.db.ledger
     .count_documents(doc! { "$or": [{"from": &user }, {"owner": &user}] }).await
@@ -254,6 +256,61 @@ async fn addr_stats(path: web::Path<String>, ctx: web::Data<Context>) -> Result<
     .count_documents(doc! { "to": &user, "type": "withdraw" }).await
     .map_err(|e| RespErr::DbErr { msg: e.to_string() })?;
   Ok(HttpResponse::Ok().json(UserStats { txs, ledger_txs, ledger_actions, deposits, withdrawals }))
+}
+
+#[derive(Debug, Deserialize)]
+struct AddrStatOpts {
+  from_block: Option<u64>,
+  to_block: Option<u64>,
+}
+
+#[get("/address/{addr}/stat/{kind}")]
+async fn addr_stat(
+  path: web::Path<(String, String)>,
+  params: web::Query<AddrStatOpts>,
+  ctx: web::Data<Context>
+) -> Result<HttpResponse, RespErr> {
+  let (user, kind) = path.into_inner();
+  let from_block = params.from_block.map(|v| v as i64);
+  let to_block = params.to_block.map(|v| v as i64);
+
+  let result = match kind.as_str() {
+    "txs" => {
+      let filter = apply_block_range(
+        doc! { "$or": [{"required_auths": &user }, {"required_posting_auths": &user}, {"ops.data.to": &user}] },
+        "anchr_height",
+        from_block,
+        to_block
+      );
+      ctx.db.tx_pool.count_documents(filter)
+    }
+    "ledger_txs" => {
+      let filter = apply_block_range(doc! { "$or": [{"from": &user }, {"owner": &user}] }, "block_height", from_block, to_block);
+      ctx.db.ledger.count_documents(filter)
+    }
+    "ledger_actions" => {
+      let filter = apply_block_range(doc! { "to": &user }, "block_height", from_block, to_block);
+      ctx.db.ledger_actions.count_documents(filter)
+    }
+    "deposits" => {
+      let filter = apply_block_range(
+        doc! { "$or": [{"from": &user }, {"owner": &user}], "t": "deposit" },
+        "block_height",
+        from_block,
+        to_block
+      );
+      ctx.db.ledger.count_documents(filter)
+    }
+    "withdrawals" => {
+      let filter = apply_block_range(doc! { "to": &user, "type": "withdraw" }, "block_height", from_block, to_block);
+      ctx.db.ledger_actions.count_documents(filter)
+    }
+    _ => {
+      return Ok(HttpResponse::BadRequest().json(json!({"error": "invalid kind"})));
+    }
+  };
+  let result = result.await.map_err(|e| RespErr::DbErr { msg: e.to_string() })?;
+  Ok(HttpResponse::Ok().json(json!({"count": result})))
 }
 
 #[get("/search/{query}")]
