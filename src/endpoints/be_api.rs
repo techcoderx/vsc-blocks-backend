@@ -1,7 +1,7 @@
 use actix_web::{ get, web, HttpResponse, Responder };
 use chrono::Utc;
 use futures_util::StreamExt;
-use mongodb::{ bson::doc, options::{ FindOneOptions, FindOptions } };
+use mongodb::{ bson::{ doc, bson }, options::{ FindOneOptions, FindOptions } };
 use serde::Deserialize;
 use serde_json::{ json, Value };
 use std::cmp::{ max, min };
@@ -262,48 +262,72 @@ async fn addr_stats(path: web::Path<String>, ctx: web::Data<Context>) -> Result<
 struct AddrStatOpts {
   from_block: Option<u64>,
   to_block: Option<u64>,
+  user: Option<String>,
+  contract: Option<String>,
+  status: Option<String>,
+  op_types: Option<String>,
+  asset: Option<String>,
 }
 
-#[get("/address/{addr}/stat/{kind}")]
-async fn addr_stat(
-  path: web::Path<(String, String)>,
+#[get("/history/stat/{kind}")]
+async fn history_stat(
+  path: web::Path<String>,
   params: web::Query<AddrStatOpts>,
   ctx: web::Data<Context>
 ) -> Result<HttpResponse, RespErr> {
-  let (user, kind) = path.into_inner();
+  let kind = path.into_inner();
   let from_block = params.from_block.map(|v| v as i64);
   let to_block = params.to_block.map(|v| v as i64);
+  let op_types = params.op_types.clone().map(|t|
+    t
+      .split(",")
+      .map(|s| s.to_string())
+      .collect::<Vec<String>>()
+  );
 
+  let mut filter = doc! {};
   let result = match kind.as_str() {
     "txs" => {
-      let filter = apply_block_range(
-        doc! { "$or": [{"required_auths": &user }, {"required_posting_auths": &user}, {"ops.data.to": &user}] },
-        "anchr_height",
-        from_block,
-        to_block
-      );
-      ctx.db.tx_pool.count_documents(filter)
+      if let Some(u) = params.user.clone() {
+        filter.insert("$or", bson!([{ "required_auths": &u }, { "required_posting_auths": &u }, { "ops.data.to": &u }]));
+      }
+      if let Some(c) = params.contract.clone() {
+        filter.insert("ops.data.contract_id", &c);
+      }
+      if let Some(s) = params.status.clone() {
+        filter.insert("status", s);
+      }
+      if let Some(ot) = op_types {
+        filter.insert("op_types", doc! { "$in": ot });
+      }
+      ctx.db.tx_pool.count_documents(apply_block_range(filter, "anchr_height", from_block, to_block))
     }
     "ledger_txs" => {
-      let filter = apply_block_range(doc! { "$or": [{"from": &user }, {"owner": &user}] }, "block_height", from_block, to_block);
-      ctx.db.ledger.count_documents(filter)
+      if let Some(u) = params.user.clone() {
+        filter.insert("$or", bson!([{"from": &u }, {"owner": &u}]));
+      }
+      if let Some(ot) = op_types {
+        filter.insert("t", doc! { "$in": ot });
+      }
+      if let Some(a) = params.asset.clone() {
+        filter.insert("tk", a);
+      }
+      ctx.db.ledger.count_documents(apply_block_range(filter, "block_height", from_block, to_block))
     }
     "ledger_actions" => {
-      let filter = apply_block_range(doc! { "to": &user }, "block_height", from_block, to_block);
-      ctx.db.ledger_actions.count_documents(filter)
-    }
-    "deposits" => {
-      let filter = apply_block_range(
-        doc! { "$or": [{"from": &user }, {"owner": &user}], "t": "deposit" },
-        "block_height",
-        from_block,
-        to_block
-      );
-      ctx.db.ledger.count_documents(filter)
-    }
-    "withdrawals" => {
-      let filter = apply_block_range(doc! { "to": &user, "type": "withdraw" }, "block_height", from_block, to_block);
-      ctx.db.ledger_actions.count_documents(filter)
+      if let Some(u) = params.user.clone() {
+        filter.insert("to", u);
+      }
+      if let Some(ot) = op_types {
+        filter.insert("type", doc! { "$in": ot });
+      }
+      if let Some(a) = params.asset.clone() {
+        filter.insert("asset", a);
+      }
+      if let Some(s) = params.status.clone() {
+        filter.insert("status", s);
+      }
+      ctx.db.ledger_actions.count_documents(apply_block_range(filter, "block_height", from_block, to_block))
     }
     _ => {
       return Ok(HttpResponse::BadRequest().json(json!({"error": "invalid kind"})));
