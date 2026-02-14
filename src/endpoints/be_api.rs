@@ -169,6 +169,7 @@ async fn get_block(path: web::Path<(String, String)>, ctx: web::Data<Context>) -
   let filter = match by.as_str() {
     "id" =>
       doc! { "be_info.block_id": id.parse::<i32>().map_err(|_| RespErr::BadRequest { msg: String::from("Invalid block number") })? },
+    "id1" => doc! { "id": id },
     "cid" => doc! { "block": id },
     "slot" =>
       doc! { "slot_height": id.parse::<i32>().map_err(|_| RespErr::BadRequest { msg: String::from("Invalid slot height") })? },
