@@ -2,7 +2,7 @@ use mongodb::bson::doc;
 use tokio::{ join, sync::RwLock, time::{ sleep, Duration } };
 use std::sync::Arc;
 use chrono::{ Datelike, Days };
-use log::{ error, info };
+use log::{ error, info, warn };
 use crate::{
   config::config,
   constants::from_config,
@@ -33,7 +33,13 @@ impl NetworkStatsIndexer {
     let http_client = self.http_client.clone();
     let db = self.db.clone();
     let running = Arc::clone(&self.is_running);
-    let start_date = from_config().start_date.clone();
+    let start_date = match parse_date_str(&from_config().start_date.clone()) {
+      Ok(d) => d,
+      Err(_) => {
+        warn!("Not indexing daily network stats due to invalid start date");
+        return;
+      }
+    };
 
     tokio::spawn(async move {
       info!("Begin indexing daily network stats");
@@ -48,7 +54,7 @@ impl NetworkStatsIndexer {
       }
       let mut last_date = match sync_state.unwrap() {
         Some(state) => state.network_stats_date.to_chrono(),
-        None => parse_date_str(&start_date).expect("Failed to parse stats start date"),
+        None => start_date,
       };
       'mainloop: loop {
         let r = running.read().await;
