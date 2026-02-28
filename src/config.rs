@@ -8,6 +8,8 @@ use toml;
 use clap::Parser;
 use lazy_static::lazy_static;
 
+use crate::constants::NetworkConsts;
+
 #[derive(Parser, Debug)]
 #[command(version, about, long_about = None)]
 pub struct Args {
@@ -68,6 +70,7 @@ pub struct DbConf {
 pub struct TomlConfig {
   pub log_level: Option<String>,
   pub network: Option<String>,
+  pub network_conf: Option<NetworkConsts>,
   pub db: DbConf,
   pub hive_rpc: String,
   pub be_indexer: Option<bool>,
@@ -97,6 +100,7 @@ impl TomlConfig {
       let default_conf = TomlConfig {
         log_level: Some(String::from("info")),
         network: Some(format!("mainnet")),
+        network_conf: None,
         db: DbConf {
           mongo_url: format!("mongodb://localhost:27017"),
           magi_db_name: format!("go-vsc"),

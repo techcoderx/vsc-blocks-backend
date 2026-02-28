@@ -1,9 +1,11 @@
+use serde::{ Deserialize, Serialize };
+
 use crate::config::config;
 
 // bridge tx count tally interval (in seconds)
 pub static BRIDGE_TXS_TALLY_INTERVAL: u64 = 600;
 
-#[derive(Clone)]
+#[derive(Clone, Serialize, Deserialize)]
 pub struct NetworkConsts {
   pub name: String,
   pub magi_explorer_url: String,
@@ -30,6 +32,9 @@ pub fn testnet_const() -> NetworkConsts {
 }
 
 pub fn from_config() -> NetworkConsts {
+  if config.network_conf.is_some() {
+    return config.network_conf.clone().unwrap();
+  }
   let net = config.network.clone().unwrap_or(format!("mainnet"));
   match net.as_str() {
     "mainnet" => mainnet_const(),
