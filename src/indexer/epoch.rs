@@ -39,7 +39,7 @@ impl ElectionIndexer {
         return;
       }
       let mut num = match sync_state.unwrap() {
-        Some(state) => state.epoch,
+        Some(state) => state.epoch.unwrap_or(-1),
         None => -1,
       };
       'mainloop: loop {

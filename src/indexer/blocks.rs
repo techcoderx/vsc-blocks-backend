@@ -44,7 +44,7 @@ impl BlockIndexer {
         return;
       }
       let mut nums = match sync_state.unwrap() {
-        Some(state) => (state.l1_height, state.l2_height),
+        Some(state) => (state.l1_height.unwrap_or(0), state.l2_height.unwrap_or(0)),
         None => (0, 0),
       };
       'mainloop: loop {

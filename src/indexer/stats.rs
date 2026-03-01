@@ -53,7 +53,7 @@ impl NetworkStatsIndexer {
         return;
       }
       let mut last_date = match sync_state.unwrap() {
-        Some(state) => state.network_stats_date.to_chrono(),
+        Some(state) => state.network_stats_date.map(|d| d.to_chrono()).unwrap_or(start_date),
         None => start_date,
       };
       'mainloop: loop {

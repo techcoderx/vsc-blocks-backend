@@ -10,10 +10,10 @@ pub struct HiveBlocksSyncState {
 
 #[derive(Clone, Debug, Deserialize)]
 pub struct IndexerState {
-  pub l1_height: u32,
-  pub l2_height: u32,
-  pub epoch: i32,
-  pub network_stats_date: DateTime,
+  pub l1_height: Option<u32>,
+  pub l2_height: Option<u32>,
+  pub epoch: Option<i32>,
+  pub network_stats_date: Option<DateTime>,
 }
 
 #[derive(Clone, Serialize, Deserialize)]
