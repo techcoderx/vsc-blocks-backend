@@ -18,6 +18,9 @@ pub struct Args {
   #[arg(long)]
   /// Dump sample config file to config.toml
   pub dump_config: bool,
+  #[arg(long)]
+  /// Drop the indexer db
+  pub drop_db: bool,
 }
 
 #[derive(Serialize, Deserialize)]

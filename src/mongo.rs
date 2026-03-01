@@ -1,8 +1,9 @@
-use mongodb::{ options::ClientOptions, Client, Collection, IndexModel };
+use clap::Parser;
+use mongodb::{ Client, Collection, Database, IndexModel, options::ClientOptions };
 use std::error::Error;
 use log::info;
 use crate::{
-  config::DbConf,
+  config::{ self, DbConf },
   types::{
     cv::CVContract,
     vsc::{
@@ -22,6 +23,10 @@ use crate::{
     },
   },
 };
+
+async fn drop_db(db: &Database) {
+  db.drop().await.expect("failed to drop db")
+}
 
 #[derive(Clone)]
 pub struct MongoDB {
@@ -53,6 +58,9 @@ impl MongoDB {
     let db = client.database(&db_conf.magi_db_name);
     let db2 = client.database(&db_conf.be_db_name);
     let db3 = client.database(&db_conf.cv_db_name);
+    if config::Args::parse().drop_db {
+      drop_db(&db2).await;
+    }
     let cv_contracts: Collection<CVContract> = db3.collection("contracts");
     let is_setup = db3.list_collection_names().await?.contains(&String::from("contracts"));
     if !is_setup {
