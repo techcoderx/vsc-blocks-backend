@@ -171,6 +171,8 @@ struct ReqVerifyNew {
   strip_tool: Option<String>,
   /// Subdirectory within the repository containing the contract source code. Defaults to `contract` if not specified.
   contract_dir: Option<String>,
+  /// Subdirectory within the repository containing the Go module (go.mod). Defaults to the repository root if not specified.
+  go_mod_dir: Option<String>,
 }
 
 #[utoipa::path(
@@ -274,6 +276,12 @@ async fn verify_new(
       return Err(RespErr::CvInvalidContractDir);
     }
   }
+  if let Some(ref dir) = req_data.go_mod_dir {
+    let go_mod_dir_regex: Regex = Regex::new(r"^[A-Za-z0-9/_.\-]+$").expect("Invalid regex pattern");
+    if dir.is_empty() || dir.contains("..") || dir.starts_with('/') || !go_mod_dir_regex.is_match(dir) {
+      return Err(RespErr::CvInvalidGoModDir);
+    }
+  }
   if !tinygo_versions.contains_key(&req_data.tinygo_version) {
     return Err(RespErr::CvInvalidTinyGoVersion);
   }
@@ -297,6 +305,7 @@ async fn verify_new(
     llvm_version: tinygo_libs.llvm,
     strip_tool: req_data.strip_tool.clone(),
     contract_dir: req_data.contract_dir.clone(),
+    go_mod_dir: req_data.go_mod_dir.clone(),
     exports: None,
     license: None,
     lang: contract.runtime.value.clone(),
@@ -352,6 +361,7 @@ async fn contract_info(path: web::Path<String>, ctx: web::Data<Context>) -> Resu
           llvm_version: similar.llvm_version,
           strip_tool: similar.strip_tool,
           contract_dir: similar.contract_dir,
+          go_mod_dir: similar.go_mod_dir,
           exports: similar.exports,
           license: similar.license,
           lang: similar.lang.clone(),

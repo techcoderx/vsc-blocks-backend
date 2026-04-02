@@ -30,6 +30,7 @@ pub enum RespErr {
   #[display("Invalid Wasm strip tool name")] CvInvalidWasmStripTool,
   #[display("Invalid TinyGo version")] CvInvalidTinyGoVersion,
   #[display("Invalid contract directory path")] CvInvalidContractDir,
+  #[display("Invalid Go module directory path")] CvInvalidGoModDir,
   #[display("Verification retry is only allowed 12 hours after the previous request time")] CvRetryLater,
   #[display("A similar contract was already verified")] CvSimilarMatch,
   #[display("{msg}")] InternalErr {
@@ -81,6 +82,7 @@ impl actix_web::error::ResponseError for RespErr {
       RespErr::CvInvalidWasmStripTool => StatusCode::BAD_REQUEST,
       RespErr::CvInvalidTinyGoVersion => StatusCode::BAD_REQUEST,
       RespErr::CvInvalidContractDir => StatusCode::BAD_REQUEST,
+      RespErr::CvInvalidGoModDir => StatusCode::BAD_REQUEST,
       RespErr::CvRetryLater => StatusCode::TOO_MANY_REQUESTS,
       RespErr::CvSimilarMatch => StatusCode::FOUND,
     }

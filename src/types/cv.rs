@@ -50,6 +50,8 @@ pub struct CVContract {
   pub strip_tool: Option<String>,
   #[serde(skip_serializing_if = "Option::is_none")]
   pub contract_dir: Option<String>,
+  #[serde(skip_serializing_if = "Option::is_none")]
+  pub go_mod_dir: Option<String>,
   pub request_ts: DateTime,
   pub verified_ts: Option<DateTime>,
   pub status: String,
@@ -90,6 +92,8 @@ pub struct CVContractResult {
   pub strip_tool: Option<String>,
   /// Subdirectory within the repository containing the contract source code
   pub contract_dir: Option<String>,
+  /// Subdirectory within the repository containing the Go module (go.mod). Defaults to the repository root if not specified.
+  pub go_mod_dir: Option<String>,
   /// Contract public exports
   pub exports: Option<Vec<String>>,
   /// SPDX identifier of contract source code license as listed in https://spdx.org/licenses

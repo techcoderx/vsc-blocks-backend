@@ -267,6 +267,7 @@ impl Compiler {
                 format!("./{}", next_contract.contract_dir.clone().unwrap_or(String::from("contract")))
               ]
             ),
+            working_dir: next_contract.go_mod_dir.as_ref().map(|d| format!("/home/tinygo/{}", d)),
             ..Default::default()
           };
           // Create the container with a specific name
