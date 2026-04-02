@@ -8,7 +8,6 @@ use hex;
 use sha2::{ Digest, Sha256 };
 use jsonwebtoken::{ Header, EncodingKey, DecodingKey, Algorithm, Validation, errors::ErrorKind };
 use utoipa::{ OpenApi, ToSchema };
-use log::debug;
 use crate::{
   config::config,
   types::{
@@ -39,7 +38,6 @@ fn verify_auth_token(req: &HttpRequest) -> Result<String, RespErr> {
     if let Some(auth_header) = req.clone().headers().get("Authorization") {
       let auth_value = auth_header.to_str().unwrap_or("");
       let parts = auth_value.split(" ").collect::<Vec<&str>>();
-      debug!("Authentication header: {}", auth_value);
       if parts.len() < 2 || parts[0] != "Bearer" {
         return Err(RespErr::TokenMissing);
       }
