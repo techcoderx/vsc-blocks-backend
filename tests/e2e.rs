@@ -2,7 +2,7 @@ use serde::Deserialize;
 use serde_json::{ self, json };
 use actix_web::{ middleware::NormalizePath, test, web, App };
 use std::{ collections::HashSet, env, time::{ Instant, Duration } };
-use vsc_blocks_backend::{
+use magi_bb::{
   compiler::Compiler,
   config::{ CompilerConf, DbConf, GoCompilerConf },
   endpoints::cv_api,
@@ -93,6 +93,7 @@ async fn test_e2e_verify_contract_go() {
       wasm_tools: format!("/usr/local/bin/wasm-tools"),
       whitelist: Vec::new(),
       fix_permissions: Some(false),
+      max_repo_size: Some(102400),
     })
   );
   let server_ctx = Context { db: db, compiler: Some(compiler), http_client: http_client.clone() };

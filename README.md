@@ -19,7 +19,7 @@ cargo b -r
 Dump a sample config file to `config.toml`:
 
 ```sh
-./vsc-blocks-backend --dump-config
+./magi-bb --dump-config
 ```
 
 ## License

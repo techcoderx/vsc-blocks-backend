@@ -157,7 +157,7 @@ impl Compiler {
                 continue 'mainloop;
               }
               let i = i.unwrap();
-              if i.size > 10240 {
+              if i.size > options.max_repo_size.unwrap_or(102400) {
                 error!("Repository is too large, size is {}", i.size);
                 let _ = update_status(&db, &next_contract.code, CVStatus::Failed).await;
                 continue 'mainloop;

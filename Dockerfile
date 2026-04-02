@@ -28,9 +28,9 @@ COPY --from=builder /app/wabt-1.0.37/bin/wasm-strip /usr/bin
 COPY --from=builder /app/wasm-tools-1.239.0-x86_64-linux/wasm-tools /usr/bin
 
 # Copy built binary from builder
-COPY --from=builder /app/target/release/vsc-blocks-backend /app/vsc-blocks-backend
+COPY --from=builder /app/target/release/magi-bb /app/magi-bb
 
 # Set working directory and default command
 WORKDIR /app
 EXPOSE 8080
-CMD ["/app/vsc-blocks-backend", "-c", "/app/config/config.toml"]
+CMD ["/app/magi-bb", "-c", "/app/config/config.toml"]

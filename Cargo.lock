@@ -2309,6 +2309,43 @@ dependencies = [
 ]
 
 [[package]]
+name = "magi-bb"
+version = "0.1.0"
+dependencies = [
+ "actix-cors",
+ "actix-multipart",
+ "actix-web",
+ "bollard",
+ "bson",
+ "bv_decoder",
+ "chrono",
+ "clap",
+ "derive_more 1.0.0",
+ "env_logger",
+ "formatter",
+ "futures-util",
+ "git2",
+ "hex",
+ "ipfs_dag",
+ "jsonwebtoken",
+ "lazy_static",
+ "log",
+ "mongodb",
+ "poise",
+ "rand 0.9.0",
+ "regex",
+ "reqwest 0.12.14",
+ "serde",
+ "serde_derive",
+ "serde_json",
+ "sha2",
+ "tokio",
+ "toml 0.8.20",
+ "utoipa",
+ "wasm_utils",
+]
+
+[[package]]
 name = "md-5"
 version = "0.10.6"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -4175,43 +4212,6 @@ name = "version_check"
 version = "0.9.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "0b928f33d975fc6ad9f86c8f283853ad26bdd5b10b7f1542aa2fa15e2289105a"
-
-[[package]]
-name = "vsc-blocks-backend"
-version = "0.1.0"
-dependencies = [
- "actix-cors",
- "actix-multipart",
- "actix-web",
- "bollard",
- "bson",
- "bv_decoder",
- "chrono",
- "clap",
- "derive_more 1.0.0",
- "env_logger",
- "formatter",
- "futures-util",
- "git2",
- "hex",
- "ipfs_dag",
- "jsonwebtoken",
- "lazy_static",
- "log",
- "mongodb",
- "poise",
- "rand 0.9.0",
- "regex",
- "reqwest 0.12.14",
- "serde",
- "serde_derive",
- "serde_json",
- "sha2",
- "tokio",
- "toml 0.8.20",
- "utoipa",
- "wasm_utils",
-]
 
 [[package]]
 name = "walkdir"

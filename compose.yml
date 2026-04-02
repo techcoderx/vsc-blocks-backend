@@ -1,7 +1,7 @@
-name: vsc-cv
+name: magi-bb
 services:
   app:
-    image: vsc-cv
+    image: techcoderx/magi-bb
     build: .
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock

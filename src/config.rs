@@ -37,6 +37,7 @@ pub struct CompilerConf {
   pub wasm_tools: String,
   pub whitelist: Vec<String>,
   pub fix_permissions: Option<bool>,
+  pub max_repo_size: Option<usize>,
 }
 
 #[derive(Serialize, Deserialize, Clone)]
@@ -126,6 +127,7 @@ impl TomlConfig {
           wasm_tools: format!("wasm-tools"),
           whitelist: Vec::new(),
           fix_permissions: Some(false),
+          max_repo_size: Some(102400),
         }),
         gocompiler: GoCompilerConf {
           src_dir: format!("{}/go_compiler", current_dir().unwrap().to_str().unwrap()),
