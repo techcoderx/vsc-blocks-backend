@@ -4,7 +4,7 @@ use mongodb::options::FindOneOptions;
 use mongodb::results::UpdateResult;
 use tokio::sync::Mutex;
 use bollard::Docker;
-use bollard::container::{ Config, CreateContainerOptions, WaitContainerOptions };
+use bollard::container::{ Config, CreateContainerOptions, LogsOptions, RemoveContainerOptions, WaitContainerOptions };
 use bollard::models::{ HostConfig, ContainerWaitResponse };
 use futures_util::StreamExt;
 use chrono::Utc;
@@ -246,7 +246,7 @@ impl Compiler {
                   format!("{}:/out", go_options.output_host_dir.clone().unwrap_or(go_options.output_dir.clone()))
                 ]
               ),
-              auto_remove: Some(true),
+              auto_remove: Some(false),
               // network_mode: Some(format!("none")),
               // readonly_rootfs: Some(false),
               memory: Some(2147483648),
@@ -281,6 +281,7 @@ impl Compiler {
           if start_container.is_err() {
             let _ = update_status(&db, &next_contract.code, CVStatus::Failed).await;
             debug!("Failed to start compiler: {}", start_container.unwrap_err().to_string());
+            let _ = docker.remove_container(cont_name, Some(RemoveContainerOptions { force: true, ..Default::default() })).await;
             continue 'mainloop;
           }
           // Wait for the container to finish and retrieve the exit code
@@ -349,12 +350,18 @@ impl Compiler {
               }
             } else {
               info!("Compilation failed with exit code {}", status_code);
+              let log_options = LogsOptions::<String> { stdout: true, stderr: true, ..Default::default() };
+              let mut log_stream = docker.logs(cont_name, Some(log_options));
+              while let Some(Ok(log)) = log_stream.next().await {
+                debug!("Container log: {}", log);
+              }
               let _ = update_status(&db, &next_contract.code, CVStatus::Failed).await;
             }
           } else {
             info!("Compilation failed with unknown exit code");
             let _ = update_status(&db, &next_contract.code, CVStatus::Failed).await;
           }
+          let _ = docker.remove_container(cont_name, Some(RemoveContainerOptions { force: true, ..Default::default() })).await;
           debug!("Deleting build artifacts");
           let _ = delete_if_exists(go_options.src_dir.clone().as_str());
           delete_dir_contents(fs::read_dir(go_options.output_dir.clone()));
