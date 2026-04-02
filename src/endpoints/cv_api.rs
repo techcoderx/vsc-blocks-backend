@@ -169,6 +169,8 @@ struct ReqVerifyNew {
   tinygo_version: String,
   /// Tool used to strip output WASM file. Valid values: `wabt` or `wasm-tools`.
   strip_tool: Option<String>,
+  /// Subdirectory within the repository containing the contract source code. Defaults to `contract` if not specified.
+  contract_dir: Option<String>,
 }
 
 #[utoipa::path(
@@ -266,6 +268,12 @@ async fn verify_new(
     }
     None => (),
   }
+  if let Some(ref dir) = req_data.contract_dir {
+    let contract_dir_regex: Regex = Regex::new(r"^[A-Za-z0-9/_.\-]+$").expect("Invalid regex pattern");
+    if dir.is_empty() || dir.contains("..") || dir.starts_with('/') || !contract_dir_regex.is_match(dir) {
+      return Err(RespErr::CvInvalidContractDir);
+    }
+  }
   if !tinygo_versions.contains_key(&req_data.tinygo_version) {
     return Err(RespErr::CvInvalidTinyGoVersion);
   }
@@ -288,6 +296,7 @@ async fn verify_new(
     go_version: tinygo_libs.go,
     llvm_version: tinygo_libs.llvm,
     strip_tool: req_data.strip_tool.clone(),
+    contract_dir: req_data.contract_dir.clone(),
     exports: None,
     license: None,
     lang: contract.runtime.value.clone(),
@@ -342,6 +351,7 @@ async fn contract_info(path: web::Path<String>, ctx: web::Data<Context>) -> Resu
           go_version: similar.go_version,
           llvm_version: similar.llvm_version,
           strip_tool: similar.strip_tool,
+          contract_dir: similar.contract_dir,
           exports: similar.exports,
           license: similar.license,
           lang: similar.lang.clone(),

@@ -48,6 +48,8 @@ pub struct CVContract {
   pub llvm_version: String,
   #[serde(skip_serializing_if = "Option::is_none")]
   pub strip_tool: Option<String>,
+  #[serde(skip_serializing_if = "Option::is_none")]
+  pub contract_dir: Option<String>,
   pub request_ts: DateTime,
   pub verified_ts: Option<DateTime>,
   pub status: String,
@@ -86,6 +88,8 @@ pub struct CVContractResult {
   pub llvm_version: String,
   /// WASM strip tool that was used on the compiled output
   pub strip_tool: Option<String>,
+  /// Subdirectory within the repository containing the contract source code
+  pub contract_dir: Option<String>,
   /// Contract public exports
   pub exports: Option<Vec<String>>,
   /// SPDX identifier of contract source code license as listed in https://spdx.org/licenses

@@ -264,7 +264,7 @@ impl Compiler {
                 format!("-no-debug"),
                 format!("-target=wasm-unknown"),
                 format!("-o=/out/build.wasm"),
-                format!("./contract")
+                format!("./{}", next_contract.contract_dir.clone().unwrap_or(String::from("contract")))
               ]
             ),
             ..Default::default()
