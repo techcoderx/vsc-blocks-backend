@@ -237,12 +237,19 @@ impl Compiler {
             let _ = update_status(&db, &next_contract.code, CVStatus::Failed);
             continue 'mainloop;
           }
+          let src_bind_host = {
+            let base = go_options.src_host_dir.clone().unwrap_or(go_options.src_dir.clone());
+            match &next_contract.go_mod_dir {
+              Some(d) => format!("{}/{}", base, d),
+              None => base,
+            }
+          };
           let cont_conf = Config {
             image: Some(format!("tinygo/tinygo:{}", next_contract.tinygo_version)),
             host_config: Some(HostConfig {
               binds: Some(
                 vec![
-                  format!("{}:/home/tinygo", go_options.src_host_dir.clone().unwrap_or(go_options.src_dir.clone())),
+                  format!("{}:/home/tinygo", src_bind_host),
                   format!("{}:/out", go_options.output_host_dir.clone().unwrap_or(go_options.output_dir.clone()))
                 ]
               ),
@@ -267,7 +274,6 @@ impl Compiler {
                 format!("./{}", next_contract.contract_dir.clone().unwrap_or(String::from("contract")))
               ]
             ),
-            working_dir: next_contract.go_mod_dir.as_ref().map(|d| format!("/home/tinygo/{}", d)),
             ..Default::default()
           };
           // Create the container with a specific name
