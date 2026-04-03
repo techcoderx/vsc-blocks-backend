@@ -253,7 +253,7 @@ impl Compiler {
                   format!("{}:/out", go_options.output_host_dir.clone().unwrap_or(go_options.output_dir.clone()))
                 ]
               ),
-              auto_remove: Some(false),
+              auto_remove: Some(true),
               // network_mode: Some(format!("none")),
               // readonly_rootfs: Some(false),
               memory: Some(2147483648),
