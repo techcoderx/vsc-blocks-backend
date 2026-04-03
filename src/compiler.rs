@@ -284,10 +284,19 @@ impl Compiler {
             let _ = docker.remove_container(cont_name, Some(RemoveContainerOptions { force: true, ..Default::default() })).await;
             continue 'mainloop;
           }
+          // Stream container logs concurrently while waiting for completion
+          let log_options = LogsOptions::<String> { follow: true, stdout: true, stderr: true, ..Default::default() };
+          let mut log_stream = docker.logs(cont_name, Some(log_options));
+          let log_task = tokio::spawn(async move {
+            while let Some(Ok(log)) = log_stream.next().await {
+              debug!("Container log: {}", log);
+            }
+          });
           // Wait for the container to finish and retrieve the exit code
           let mut stream = docker.wait_container(cont_name, Some(WaitContainerOptions { condition: "not-running" }));
           if let Some(Ok(ContainerWaitResponse { status_code, .. })) = stream.next().await {
             info!("Compiler exited with status code: {}", status_code);
+            let _ = log_task.await;
             if status_code == 0 {
               let mut output = fs::read(format!("{}/build.wasm", go_options.output_dir));
               if output.is_err() {
@@ -350,11 +359,6 @@ impl Compiler {
               }
             } else {
               info!("Compilation failed with exit code {}", status_code);
-              let log_options = LogsOptions::<String> { stdout: true, stderr: true, ..Default::default() };
-              let mut log_stream = docker.logs(cont_name, Some(log_options));
-              while let Some(Ok(log)) = log_stream.next().await {
-                debug!("Container log: {}", log);
-              }
               let _ = update_status(&db, &next_contract.code, CVStatus::Failed).await;
             }
           } else {
