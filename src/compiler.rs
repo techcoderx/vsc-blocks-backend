@@ -289,7 +289,7 @@ impl Compiler {
           let mut log_stream = docker.logs(cont_name, Some(log_options));
           let log_task = tokio::spawn(async move {
             while let Some(Ok(log)) = log_stream.next().await {
-              debug!("Container log: {}", log);
+              debug!("Container log: {}", log.to_string().trim_end());
             }
           });
           // Wait for the container to finish and retrieve the exit code
