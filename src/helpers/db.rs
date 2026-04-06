@@ -17,20 +17,19 @@ pub struct Props {
 
 pub async fn get_props(db: &MongoDB) -> Result<Props, Error> {
   let db = db.clone();
-  let pipeline = vec![doc! {
-      "$group": {
-        "_id": "$account"
-      }
-    }, doc! { "$count": "total" }];
-
-  let mut wit_cursor = db.witnesses.aggregate(pipeline).await?;
-  let witness_count = wit_cursor
-    .next().await
-    .transpose()?
-    .map(|d| d.get_i32("total").unwrap_or(0))
+  let opt = FindOneOptions::builder()
+    .sort(doc! { "epoch": -1 })
+    .build();
+  let latest_election = db.elections.find_one(doc! {}).with_options(opt).await?;
+  let witness_count = latest_election
+    .as_ref()
+    .map(|e| e.members.len() as i32)
+    .unwrap_or(0);
+  let epoch = latest_election
+    .as_ref()
+    .map(|e| e.epoch as u64)
     .unwrap_or(0);
   let contracts = db.contracts.count_documents(doc! { "latest": true }).await?;
-  let epoch = db.elections.estimated_document_count().await?;
   let block_count = db.blocks.estimated_document_count().await?;
   let last_l1_block = match db.l1_blocks.find_one(doc! { "type": "metadata" }).await? {
     Some(state) => state.last_processed_block,
@@ -41,7 +40,7 @@ pub async fn get_props(db: &MongoDB) -> Result<Props, Error> {
     last_processed_block: last_l1_block,
     l2_block_height: block_count,
     witnesses: witness_count,
-    epoch: epoch.saturating_sub(1),
+    epoch,
     contracts,
     transactions: tx_count,
   });
