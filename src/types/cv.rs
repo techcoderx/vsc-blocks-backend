@@ -58,6 +58,8 @@ pub struct CVContract {
   pub exports: Option<Vec<String>>,
   pub license: Option<String>,
   pub lang: String,
+  #[serde(skip_serializing_if = "Option::is_none")]
+  pub gitea_url: Option<String>,
 }
 
 #[derive(Clone, Serialize, ToResponse, ToSchema)]
@@ -100,6 +102,8 @@ pub struct CVContractResult {
   pub license: Option<String>,
   /// Language of contract source code
   pub lang: String,
+  /// URL of the preserved source code mirror (Gitea)
+  pub gitea_url: Option<String>,
 }
 
 #[derive(Clone, Deserialize)]

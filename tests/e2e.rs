@@ -94,7 +94,8 @@ async fn test_e2e_verify_contract_go() {
       whitelist: Vec::new(),
       fix_permissions: Some(false),
       max_repo_size: Some(102400),
-    })
+    }),
+    None
   );
   let server_ctx = Context { db: db, compiler: Some(compiler), http_client: http_client.clone() };
   let app = test::init_service(

@@ -307,6 +307,7 @@ async fn verify_new(
     exports: None,
     license: None,
     lang: contract.runtime.value.clone(),
+    gitea_url: None,
   };
   ctx.db.cv_contracts.insert_one(new_cv).await.map_err(|e| RespErr::DbErr { msg: e.to_string() })?;
   ctx.compiler.clone().unwrap().notify();
@@ -363,6 +364,7 @@ async fn contract_info(path: web::Path<String>, ctx: web::Data<Context>) -> Resu
           exports: similar.exports,
           license: similar.license,
           lang: similar.lang.clone(),
+          gitea_url: similar.gitea_url,
         })
       );
     }

@@ -64,7 +64,7 @@ async fn main() -> std::io::Result<()> {
         error!("Missing Github API key for compiler");
         process::exit(1);
       }
-      Some(compiler::Compiler::init(&db, &http_client, &config.gocompiler, &config.compiler.clone().unwrap()))
+      Some(compiler::Compiler::init(&db, &http_client, &config.gocompiler, &config.compiler.clone().unwrap(), config.gitea.clone()))
     }
     false => None,
   };

@@ -63,6 +63,14 @@ pub struct DiscordConf {
 }
 
 #[derive(Serialize, Deserialize, Clone)]
+pub struct GiteaConf {
+  pub url: String,
+  pub token: String,
+  pub owner: String,
+  pub is_org: Option<bool>,
+}
+
+#[derive(Serialize, Deserialize, Clone)]
 pub struct DbConf {
   pub mongo_url: String,
   pub magi_db_name: String,
@@ -83,6 +91,7 @@ pub struct TomlConfig {
   pub compiler: Option<CompilerConf>,
   pub gocompiler: GoCompilerConf,
   pub discord: Option<DiscordConf>,
+  pub gitea: Option<GiteaConf>,
 }
 
 impl TomlConfig {
@@ -137,6 +146,7 @@ impl TomlConfig {
           timeout: 10,
         },
         discord: None,
+        gitea: None,
       };
       let serialized = toml::ser::to_string(&default_conf).unwrap();
       let _ = fs::write(&filepath, serialized);

@@ -9,11 +9,11 @@ use bollard::models::{ HostConfig, ContainerWaitResponse };
 use futures_util::StreamExt;
 use chrono::Utc;
 use tokio::time::{ sleep, Duration };
-use git2::Repository;
+use git2::{ Cred, PushOptions, RemoteCallbacks, Repository };
 use wasm_utils::list_exports;
 use std::{ error::Error, fs, io, path::Path, process::{ self, Command }, sync::Arc };
 use log::{ info, debug, error };
-use crate::config::{ CompilerConf, GoCompilerConf };
+use crate::config::{ CompilerConf, GiteaConf, GoCompilerConf };
 use crate::mongo::MongoDB;
 use crate::types::cv::{ CVStatus, GithubBranchInfo, GithubRepoInfo };
 
@@ -58,6 +58,88 @@ async fn update_status(db: &MongoDB, code: &str, status: CVStatus) -> Result<Upd
   db.clone().cv_contracts.update_one(doc! { "_id": code }, doc! { "$set": {"status": status.to_string() } }).await
 }
 
+fn git_push_to_gitea(
+  gitea: &GiteaConf,
+  cid: &str,
+  branch: &str,
+  commit: &str,
+  src_dir: &str,
+) -> Result<String, String> {
+  let base = gitea.url.trim_end_matches('/');
+  let repo = Repository::open(src_dir).map_err(|e| format!("open {}: {}", src_dir, e))?;
+  let commit_oid = repo
+    .revparse_single(commit)
+    .map_err(|e| format!("revparse {}: {}", commit, e))?
+    .id();
+  let verified_ref = "refs/heads/verified";
+  let branch_ref = format!("refs/heads/{}", branch);
+  repo
+    .reference(&branch_ref, commit_oid, true, "mirror to gitea")
+    .map_err(|e| format!("create ref {}: {}", branch_ref, e))?;
+  repo
+    .reference(verified_ref, commit_oid, true, "mirror to gitea")
+    .map_err(|e| format!("create ref {}: {}", verified_ref, e))?;
+
+  let push_url = format!("{}/{}/{}.git", base, gitea.owner, cid);
+  let token = gitea.token.clone();
+  let mut callbacks = RemoteCallbacks::new();
+  callbacks.credentials(move |_url, _username, _allowed| {
+    Cred::userpass_plaintext("oauth2", &token)
+  });
+  let mut push_opts = PushOptions::new();
+  push_opts.remote_callbacks(callbacks);
+
+  let mut remote = repo
+    .remote_anonymous(&push_url)
+    .map_err(|e| format!("remote_anonymous {}: {}", push_url, e))?;
+  let refspecs = [
+    format!("+{}:{}", branch_ref, branch_ref),
+    format!("+{}:{}", verified_ref, verified_ref),
+  ];
+  let refspec_refs: Vec<&str> = refspecs.iter().map(String::as_str).collect();
+  remote
+    .push(&refspec_refs, Some(&mut push_opts))
+    .map_err(|e| format!("push to {}: {}", push_url, e))?;
+
+  Ok(format!("{}/{}/{}", base, gitea.owner, cid))
+}
+
+async fn push_to_gitea(
+  http_client: &reqwest::Client,
+  gitea: &GiteaConf,
+  cid: &str,
+  repo_name: &str,
+  branch: &str,
+  commit: &str,
+  src_dir: &str,
+) -> Result<String, String> {
+  let base = gitea.url.trim_end_matches('/');
+  let create_endpoint = if gitea.is_org.unwrap_or(false) {
+    format!("{}/api/v1/orgs/{}/repos", base, gitea.owner)
+  } else {
+    format!("{}/api/v1/user/repos", base)
+  };
+  let body = serde_json::json!({
+    "name": cid,
+    "description": format!("Verified contract {}@{}", repo_name, commit),
+    "auto_init": false,
+    "private": false,
+  });
+  let resp = http_client
+    .post(&create_endpoint)
+    .header("Authorization", format!("token {}", gitea.token))
+    .json(&body)
+    .send().await
+    .map_err(|e| format!("gitea create request failed: {}", e))?;
+  let status = resp.status();
+  if !status.is_success() && status.as_u16() != 409 {
+    let text = resp.text().await.unwrap_or_default();
+    return Err(format!("gitea create repo failed: {} {}", status, text));
+  }
+
+  git_push_to_gitea(gitea, cid, branch, commit, src_dir)
+}
+
 /// Go contract compiler
 #[derive(Clone)]
 pub struct Compiler {
@@ -67,10 +149,17 @@ pub struct Compiler {
   http_client: reqwest::Client,
   options: CompilerConf,
   go_options: GoCompilerConf,
+  gitea: Option<GiteaConf>,
 }
 
 impl Compiler {
-  pub fn init(db: &MongoDB, http_client: &reqwest::Client, go_options: &GoCompilerConf, options: &CompilerConf) -> Self {
+  pub fn init(
+    db: &MongoDB,
+    http_client: &reqwest::Client,
+    go_options: &GoCompilerConf,
+    options: &CompilerConf,
+    gitea: Option<GiteaConf>,
+  ) -> Self {
     let docker = match Docker::connect_with_local_defaults() {
       Ok(d) => d,
       Err(e) => {
@@ -85,6 +174,7 @@ impl Compiler {
       http_client: http_client.clone(),
       options: options.clone(),
       go_options: go_options.clone(),
+      gitea,
     };
   }
 
@@ -103,6 +193,7 @@ impl Compiler {
     let http_client = self.http_client.clone();
     let go_options = self.go_options.clone();
     let options = self.options.clone();
+    let gitea = self.gitea.clone();
     let mkdir = create_dir_if_not_exists(go_options.output_dir.clone());
     if mkdir.is_err() {
       error!("Failed to create output directory");
@@ -350,15 +441,41 @@ impl Compiler {
                 .map(|e| Some(e))
                 .unwrap_or(None);
               if cid_match {
+                let gitea_url = match &gitea {
+                  Some(g) =>
+                    match
+                      push_to_gitea(
+                        &http_client,
+                        g,
+                        &next_contract.code,
+                        &next_contract.repo_name,
+                        &next_contract.repo_branch,
+                        &git_commit,
+                        &go_options.src_dir
+                      ).await
+                    {
+                      Ok(u) => Some(u),
+                      Err(e) => {
+                        error!("Gitea push failed: {}", e);
+                        None
+                      }
+                    }
+                  None => None,
+                };
+                let mut set_doc =
+                  doc! {
+                  "status": CVStatus::Success.to_string(),
+                  "verified_ts": bson::DateTime::from_chrono(Utc::now()),
+                  "git_commit": git_commit,
+                  "license": repo_info.license,
+                  "exports": exports,
+                };
+                if let Some(u) = gitea_url {
+                  set_doc.insert("gitea_url", u);
+                }
                 let _ = db.cv_contracts.update_one(
                   doc! { "_id": next_contract.code },
-                  doc! { "$set": {
-                    "status": CVStatus::Success.to_string(),
-                    "verified_ts": bson::DateTime::from_chrono(Utc::now()),
-                    "git_commit": git_commit,
-                    "license": repo_info.license,
-                    "exports": exports
-                  }}
+                  doc! { "$set": set_doc }
                 ).await;
               } else {
                 let _ = update_status(&db, &next_contract.code, CVStatus::NotMatch).await;
