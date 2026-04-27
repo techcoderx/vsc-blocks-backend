@@ -14,8 +14,9 @@ mod indexer;
 mod compiler;
 mod chatbot;
 mod helpers;
+use std::sync::Arc;
 use types::server::Context;
-use endpoints::{ be_api, cv_api };
+use endpoints::{ be_api, cv_api, og };
 
 #[actix_web::main]
 async fn main() -> std::io::Result<()> {
@@ -78,9 +79,10 @@ async fn main() -> std::io::Result<()> {
     discord_bot.start();
   }
   let server_ctx = Context { db, compiler, http_client: http_client.clone() };
+  let og_shared = config.og.as_ref().filter(|c| c.enabled).map(|c| Arc::new(og::OgShared::new(c)));
   HttpServer::new(move || {
     let cors = Cors::default().allow_any_origin().allow_any_method().allow_any_header().max_age(3600);
-    App::new()
+    let mut app = App::new()
       .wrap(cors)
       .wrap(NormalizePath::trim())
       .app_data(web::Data::new(server_ctx.clone()))
@@ -110,7 +112,17 @@ async fn main() -> std::io::Result<()> {
           .service(be_api::addr_stats)
           .service(be_api::search)
           .service(be_api::network_stats)
-      )
+      );
+    if let Some(shared) = og_shared.clone() {
+      app = app.service(
+        web
+          ::scope("/og")
+          .app_data(web::Data::new(shared))
+          .service(og::healthz)
+          .service(og::render_resource())
+      );
+    }
+    app
   })
     .bind((config.server.address.as_str(), config.server.port))?
     .run().await

@@ -78,6 +78,18 @@ pub struct DbConf {
   pub cv_db_name: String,
 }
 
+#[derive(Serialize, Deserialize, Clone)]
+pub struct OgConf {
+  pub enabled: bool,
+  pub canonical_origin: String,
+  pub gql_api_url: String,
+  pub hasura_url: String,
+  pub haf_api_url: String,
+  pub og_image_url: String,
+  pub upstream_timeout_ms: Option<u64>,
+  pub cache_ttl_sec: Option<u64>,
+}
+
 #[derive(Serialize, Deserialize)]
 pub struct TomlConfig {
   pub log_level: Option<String>,
@@ -92,6 +104,7 @@ pub struct TomlConfig {
   pub gocompiler: GoCompilerConf,
   pub discord: Option<DiscordConf>,
   pub gitea: Option<GiteaConf>,
+  pub og: Option<OgConf>,
 }
 
 impl TomlConfig {
@@ -147,6 +160,16 @@ impl TomlConfig {
         },
         discord: None,
         gitea: None,
+        og: Some(OgConf {
+          enabled: false,
+          canonical_origin: format!("https://vsc.techcoderx.com"),
+          gql_api_url: format!("http://magi-1:8080/api/v1/graphql"),
+          hasura_url: format!("http://magi-hasura:8080/v1/graphql"),
+          haf_api_url: format!("http://magi-haf-postgrest:3000"),
+          og_image_url: format!("https://vsc.techcoderx.com/img/og-image.png"),
+          upstream_timeout_ms: Some(3000),
+          cache_ttl_sec: Some(60),
+        }),
       };
       let serialized = toml::ser::to_string(&default_conf).unwrap();
       let _ = fs::write(&filepath, serialized);
