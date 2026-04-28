@@ -158,7 +158,7 @@ async fn resolve_address(state: &OgState, addr: &str, sub: Option<&str>) -> Part
   if is_l1 {
     let username = &addr[5..];
     let acc = fetchers::fetch_l1_account(state, username).await;
-    let has_data = acc.as_ref().and_then(|a| a.username.as_ref()).is_some();
+    let has_data = acc.as_ref().and_then(|a| a.account.as_ref()).is_some();
     p.title = Some(format!("@{}", username));
     p.description = Some(if has_data {
       address_tab_description(addr, sub)

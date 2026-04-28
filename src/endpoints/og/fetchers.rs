@@ -8,7 +8,6 @@ pub struct OgState {
   pub http_client: reqwest::Client,
   pub gql_api_url: String,
   pub hasura_url: String,
-  pub haf_api_url: String,
 }
 
 async fn json_get<T: for<'de> Deserialize<'de>>(client: &reqwest::Client, url: &str) -> Option<T> {
@@ -139,25 +138,25 @@ pub async fn fetch_epoch(db: &MongoDB, num: i64) -> Option<EpochInfo> {
   })
 }
 
-// ---- L1 Account via HAF PostgREST ----
+// ---- L1 Account via VSC GraphQL ----
 
 #[derive(Deserialize, Debug)]
 pub struct L1Account {
-  pub username: Option<String>,
+  pub account: Option<String>,
+}
+
+#[derive(Deserialize)]
+struct L1AccountResp {
+  #[serde(rename = "getAccountBalance")]
+  get_account_balance: Option<L1Account>,
 }
 
 pub async fn fetch_l1_account(state: &OgState, username: &str) -> Option<L1Account> {
-  let url = format!("{}/rpc/get_l1_user", state.haf_api_url);
-  let res = state.http_client
-    .get(&url)
-    .query(&[("username", username)])
-    .header("accept", "application/json")
-    .send().await
-    .ok()?;
-  if !res.status().is_success() {
-    return None;
-  }
-  res.json::<L1Account>().await.ok()
+  let query =
+    r#"query AccountBal($account: String!) { getAccountBalance(account: $account) { account } }"#;
+  let vars = json!({ "account": format!("hive:{}", username) });
+  let res: L1AccountResp = gql_query(&state.http_client, &state.gql_api_url, query, vars).await?;
+  res.get_account_balance
 }
 
 // ---- Contract via direct DB ----

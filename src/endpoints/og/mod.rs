@@ -38,7 +38,6 @@ impl OgShared {
         http_client,
         gql_api_url: conf.gql_api_url.clone(),
         hasura_url: conf.hasura_url.clone(),
-        haf_api_url: conf.haf_api_url.clone(),
       },
       cache: TtlCache::new(ttl, 1000),
       canonical_origin: conf.canonical_origin.trim_end_matches('/').to_string(),
