@@ -75,7 +75,13 @@ async fn main() -> std::io::Result<()> {
   }
   if config.discord.is_some() {
     let consts = constants::from_config();
-    let discord_bot = chatbot::discord::DiscordBot::init(&config.discord.clone().unwrap(), &consts, &db, &http_client);
+    let discord_bot = chatbot::discord::DiscordBot::init(
+      &config.discord.clone().unwrap(),
+      &consts,
+      &db,
+      &http_client,
+      config.og.as_ref().filter(|c| c.enabled),
+    );
     discord_bot.start();
   }
   let server_ctx = Context { db, compiler, http_client: http_client.clone() };

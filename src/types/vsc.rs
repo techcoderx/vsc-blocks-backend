@@ -233,6 +233,7 @@ pub struct TransactionRecord {
 pub struct OpInfo {
   #[serde(rename = "type")]
   pub r#type: String,
+  pub data: Option<Value>,
 }
 
 #[derive(Clone, Serialize, Deserialize)]

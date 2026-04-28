@@ -1,9 +1,20 @@
 use std::ops::{ Div, Sub };
 
 use crate::{
-  config::{ config, DiscordConf },
+  config::{ config, DiscordConf, OgConf },
   constants::NetworkConsts,
-  helpers::db::{ get_props, get_user_balance, get_user_cons_unstaking, get_witness, get_witness_stats },
+  helpers::{
+    db::{ get_props, get_user_balance, get_user_cons_unstaking, get_witness, get_witness_stats },
+    log_actions::{
+      describe_action,
+      fetch_dag_batch,
+      fetch_log_metadata,
+      parse_log,
+      resolve_contract_type,
+      unique_dynamic_contract_ids,
+    },
+    tx_desc::{ describe_op, op_method },
+  },
   mongo::MongoDB,
   types::{ hive::DgpAtBlock, vsc::ElectionMember },
 };
@@ -17,6 +28,7 @@ struct Data {
   pub consts: NetworkConsts,
   pub db: MongoDB,
   pub http_client: reqwest::Client,
+  pub og_urls: Option<(String, String)>,
 } // User data, which is stored and accessible in all command invocations
 type Error = Box<dyn std::error::Error + Send + Sync>;
 type Context<'a> = poise::Context<'a, Data, Error>;
@@ -292,10 +304,27 @@ async fn tx(
     1 => trx.required_auths[0].clone(),
     _ => format!("{} *(+{})*", trx.required_auths[0], trx.required_auths.len().sub(1)),
   };
-  let tx_type_text = match trx.ops.len() {
-    0 => String::from("*None*"),
-    1 => trx.ops[0].clone().r#type,
-    _ => String::from("*Multiple*"),
+  let signer = trx.required_auths.first().map(|s| s.as_str());
+  let action_logs = if trx.status == "CONFIRMED" {
+    fetch_call_log_descriptions(&ctx.data().http_client, &ctx.data().og_urls, &trx).await
+  } else {
+    None
+  };
+  let method_text = if trx.ops.is_empty() {
+    String::from("*None*")
+  } else {
+    trx.ops.iter().map(op_method).collect::<Vec<_>>().join("\n")
+  };
+  let description_text: Option<String> = match &action_logs {
+    Some(lines) => Some(lines.clone()),
+    None => {
+      let descs: Vec<String> = trx.ops
+        .iter()
+        .map(|op| describe_op(op, signer))
+        .filter(|s| !s.is_empty())
+        .collect();
+      if descs.is_empty() { None } else { Some(descs.join("\n")) }
+    }
   };
   let dgp_req = ctx
     .data()
@@ -303,24 +332,98 @@ async fn tx(
     .send().await?;
   let dgp = dgp_req.json::<DgpAtBlock>().await?;
   let magi_be_url = ctx.data().consts.magi_explorer_url.clone();
+  let mut fields: Vec<(&str, String, bool)> = vec![
+    ("Transaction ID", tx_id.clone(), false),
+    ("Timestamp", time(dgp.created_at.clone(), 'f'), true),
+    ("L1 Block", thousand_separator(trx.anchored_height), true),
+    ("Position In Block", thousand_separator(trx.anchored_index), true),
+    ("Method", method_text, true),
+    ("Signers", signers_text, true),
+    ("Status", String::from(status_text), true)
+  ];
+  if let Some(d) = description_text {
+    fields.push(("Description", d, false));
+  }
   let embed = CreateEmbed::new()
     .title("Magi Transaction")
     .url(format!("{}/tx/{}", magi_be_url, tx_id))
-    .fields(
-      vec![
-        ("Transaction ID", tx_id, false),
-        ("Timestamp", time(dgp.created_at.clone(), 'f'), true),
-        ("L1 Block", thousand_separator(trx.anchored_height), true),
-        ("Position In Block", thousand_separator(trx.anchored_index), true),
-        ("Type", tx_type_text, true),
-        ("Signers", signers_text, true),
-        ("Status", String::from(status_text), true)
-      ]
-    )
+    .fields(fields)
     .timestamp(Timestamp::now());
   let reply = CreateReply::default().embed(embed);
   ctx.send(reply).await?;
   Ok(())
+}
+
+async fn fetch_call_log_descriptions(
+  http_client: &reqwest::Client,
+  og_urls: &Option<(String, String)>,
+  trx: &crate::types::vsc::TransactionRecord
+) -> Option<String> {
+  let (gql_url, hasura_url) = og_urls.as_ref()?;
+  let outputs = trx.output.as_ref()?;
+  if outputs.is_empty() {
+    return None;
+  }
+  let cids: Vec<String> = outputs.iter().map(|o| o.id.clone()).collect();
+  let dags = match fetch_dag_batch(http_client, gql_url, &cids).await {
+    Ok(d) => d,
+    Err(e) => {
+      log::warn!("Failed to fetch contract output DAGs: {}", e);
+      return None;
+    }
+  };
+  if dags.is_empty() {
+    return None;
+  }
+  let dynamic_ids = unique_dynamic_contract_ids(&dags);
+  let metadata = match fetch_log_metadata(http_client, hasura_url, &dynamic_ids).await {
+    Ok(m) => m,
+    Err(e) => {
+      log::warn!("Failed to fetch log action metadata: {}", e);
+      return None;
+    }
+  };
+  let mut lines: Vec<String> = Vec::new();
+  for (i, out) in outputs.iter().enumerate() {
+    let dag = match dags.get(i) {
+      Some(d) => d,
+      None => {
+        continue;
+      }
+    };
+    for &idx in &out.index {
+      let result = match dag.results.get(idx as usize) {
+        Some(r) => r,
+        None => {
+          continue;
+        }
+      };
+      let logs = match &result.logs {
+        Some(l) => l,
+        None => {
+          continue;
+        }
+      };
+      let ctype = resolve_contract_type(&dag.contract_id, &metadata);
+      for log in logs {
+        let parsed = parse_log(ctype.as_deref(), log);
+        if let Some(desc) = describe_action(&dag.contract_id, ctype.as_deref(), &parsed.event_type, &parsed.fields, &metadata) {
+          lines.push(format!("• {}", desc));
+        }
+      }
+    }
+  }
+  if lines.is_empty() { None } else { Some(truncate_for_field(lines.join("\n"))) }
+}
+
+fn truncate_for_field(s: String) -> String {
+  const MAX: usize = 1000;
+  if s.chars().count() <= MAX {
+    return s;
+  }
+  let mut truncated: String = s.chars().take(MAX).collect();
+  truncated.push_str("\n…");
+  truncated
 }
 
 #[derive(Clone)]
@@ -329,11 +432,25 @@ pub struct DiscordBot {
   pub consts: NetworkConsts,
   pub db: MongoDB,
   pub http_client: reqwest::Client,
+  pub og_urls: Option<(String, String)>,
 }
 
 impl DiscordBot {
-  pub fn init(conf: &DiscordConf, consts: &NetworkConsts, db: &MongoDB, http_client: &reqwest::Client) -> DiscordBot {
-    return DiscordBot { conf: conf.clone(), consts: consts.clone(), db: db.clone(), http_client: http_client.clone() };
+  pub fn init(
+    conf: &DiscordConf,
+    consts: &NetworkConsts,
+    db: &MongoDB,
+    http_client: &reqwest::Client,
+    og: Option<&OgConf>
+  ) -> DiscordBot {
+    let og_urls = og.map(|c| (c.gql_api_url.clone(), c.hasura_url.clone()));
+    DiscordBot {
+      conf: conf.clone(),
+      consts: consts.clone(),
+      db: db.clone(),
+      http_client: http_client.clone(),
+      og_urls,
+    }
   }
 
   pub fn start(&self) {
@@ -342,6 +459,7 @@ impl DiscordBot {
     let consts = self.consts.clone();
     let db = self.db.clone();
     let http_client = self.http_client.clone();
+    let og_urls = self.og_urls.clone();
     let framework = poise::Framework
       ::builder()
       .options(poise::FrameworkOptions {
@@ -358,7 +476,7 @@ impl DiscordBot {
           //   http.delete_global_command(cmd.id.into()).await?;
           // }
           poise::builtins::register_globally(ctx, &framework.options().commands).await?;
-          Ok(Data { consts, db, http_client })
+          Ok(Data { consts, db, http_client, og_urls })
         })
       })
       .build();
