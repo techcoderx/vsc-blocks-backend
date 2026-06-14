@@ -40,13 +40,13 @@ lazy_static! {
     });
     m.insert("/transactions/hive", StaticMeta {
       title: "Hive Transactions",
-      description: "Latest Hive L1 custom_json operations routed to Magi.",
+      description: "Latest Hive L1 operations relevant to Magi.",
       og_type: None,
       noindex: false,
     });
     m.insert("/contracts", StaticMeta {
       title: "Contracts",
-      description: "Smart contracts deployed on the Magi network.",
+      description: "Contracts deployed on Magi.",
       og_type: None,
       noindex: false,
     });
@@ -64,7 +64,7 @@ lazy_static! {
     });
     m.insert("/witnesses", StaticMeta {
       title: "Witnesses",
-      description: "Magi network witnesses — uptime, stake weight, and participation.",
+      description: "Magi witnesses — uptime, stake weight, and participation.",
       og_type: None,
       noindex: false,
     });
@@ -76,13 +76,13 @@ lazy_static! {
     });
     m.insert("/elections", StaticMeta {
       title: "Elections",
-      description: "Magi witness election history.",
+      description: "Magi elections.",
       og_type: None,
       noindex: false,
     });
     m.insert("/nam/btc", StaticMeta {
       title: "BTC Mapping",
-      description: "Native bitcoin mappings on the Magi network.",
+      description: "Native bitcoin asset mapping info on the Magi network.",
       og_type: None,
       noindex: false,
     });
@@ -94,13 +94,13 @@ lazy_static! {
     });
     m.insert("/nam/hive/maps", StaticMeta {
       title: "Hive Bridge Deposits",
-      description: "Latest deposits from Hive L1 to Magi L2.",
+      description: "Latest maps of native Hive assets.",
       og_type: None,
       noindex: false,
     });
     m.insert("/nam/hive/unmaps", StaticMeta {
       title: "Hive Bridge Withdrawals",
-      description: "Latest withdrawals from Magi L2 to Hive L1.",
+      description: "Latest unmaps of native Hive assets.",
       og_type: None,
       noindex: false,
     });
@@ -112,13 +112,13 @@ lazy_static! {
     });
     m.insert("/staking/hbd/claims", StaticMeta {
       title: "HBD Staking Claims",
-      description: "Latest HBD staking interest claims on Magi.",
+      description: "Latest HBD liquid staking interest claims on Magi.",
       og_type: None,
       noindex: false,
     });
     m.insert("/charts", StaticMeta {
       title: "Charts",
-      description: "Network charts for the Magi L2 explorer.",
+      description: "Magi network charts.",
       og_type: None,
       noindex: false,
     });
@@ -178,7 +178,7 @@ lazy_static! {
     });
     m.insert("/settings", StaticMeta {
       title: "Settings",
-      description: "User preferences for Magi Blocks Explorer.",
+      description: "User preferences for Magi Blocks.",
       og_type: None,
       noindex: true,
     });

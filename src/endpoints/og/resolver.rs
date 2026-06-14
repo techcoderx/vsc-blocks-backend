@@ -52,35 +52,21 @@ fn static_to_partial(s: &StaticMeta) -> PartialMeta {
 }
 
 fn address_tab_description(addr: &str, sub: Option<&str>) -> String {
-  let target = if let Some(name) = addr.strip_prefix("hive:") {
-    format!("@{}", name)
-  } else {
-    addr.to_string()
-  };
+  let target = if let Some(name) = addr.strip_prefix("hive:") { format!("@{}", name) } else { addr.to_string() };
   match sub {
-    Some("hiveops") => format!("Hive L1 operations history for {} on Magi.", target),
-    Some("ledger") => format!(
-      "Ledger history for {} on Magi — deposits, withdrawals, transfers, interest, and fees.",
-      target
-    ),
+    Some("hiveops") => format!("Hive L1 operation history for {} on Magi.", target),
+    Some("ledger") => format!("Ledger history for {} on Magi — deposits, withdrawals, transfers, interest, and fees.", target),
     Some("actions") => format!("Ledger actions initiated by {} on Magi.", target),
     Some("deposits") => format!("Bridge deposits for {} on Magi.", target),
     Some("withdrawals") => format!("Bridge withdrawals for {} on Magi.", target),
-    Some("witness") =>
-      format!("Witness profile for {} on Magi — stake, uptime, and signing keys.", target),
+    Some("witness") => format!("Witness profile for {} on Magi — stake, uptime, and signing keys.", target),
     Some("balances") => format!("Token and native balances for {} on Magi.", target),
     Some("nfts") => format!("NFT holdings for {} on Magi.", target),
     _ => {
       if addr.starts_with("hive:") {
-        format!(
-          "Hive account {} on Magi — balances, transactions, ledger ops, bridge deposits/withdrawals, and witness info.",
-          target
-        )
+        format!("Hive account {} on Magi — balances, transactions, ledger ops, NAM deposits/withdrawals, and witness info.", target)
       } else {
-        format!(
-          "Address {} on Magi — balances, transactions, ledger ops, and NFT holdings.",
-          addr
-        )
+        format!("Address {} on Magi — balances, transactions, ledger ops, and NFT holdings.", addr)
       }
     }
   }
@@ -100,16 +86,9 @@ async fn resolve_tx(state: &OgState, txid: &str) -> PartialMeta {
     let block = data.as_ref().and_then(|d| d.block_num);
     p.title = Some(format!("L1 Tx {}", abbreviate_hash(txid, 8, 6)));
     p.description = Some(match (block, op_type) {
-      (Some(b), Some(t)) =>
-        format!(
-          "Hive L1 transaction {} — {} operation in block #{} on Magi.",
-          txid,
-          t,
-          thousand_separator(b)
-        ),
-      (Some(b), None) =>
-        format!("Hive L1 transaction {} in block #{} on Magi.", txid, thousand_separator(b)),
-      _ => format!("Hive L1 transaction {} on Magi.", txid),
+      (Some(b), Some(t)) => format!("Hive transaction {} — {} operation in block #{} on Magi.", txid, t, thousand_separator(b)),
+      (Some(b), None) => format!("Hive transaction {} in block #{} on Magi.", txid, thousand_separator(b)),
+      _ => format!("Hive transaction {} on Magi.", txid),
     });
     return p;
   }
@@ -117,7 +96,7 @@ async fn resolve_tx(state: &OgState, txid: &str) -> PartialMeta {
   p.title = Some(format!("Tx {}", abbreviate_hash(txid, 12, 6)));
   p.description = Some(match data {
     Some(t) => {
-      let mut parts: Vec<String> = vec![format!("Magi L2 transaction {}", txid)];
+      let mut parts: Vec<String> = vec![format!("Magi transaction {}", txid)];
       if let Some(status) = t.status {
         parts.push(format!("status {}", status));
       }
@@ -137,17 +116,14 @@ async fn resolve_tx(state: &OgState, txid: &str) -> PartialMeta {
       }
       format!("{}.", parts.join(" — "))
     }
-    None => format!("Magi L2 transaction {}.", txid),
+    None => format!("Magi transaction {}.", txid),
   });
   p
 }
 
 async fn resolve_address(state: &OgState, addr: &str, sub: Option<&str>) -> PartialMeta {
   let mut p = PartialMeta::new();
-  let is_l1 = addr
-    .strip_prefix("hive:")
-    .map(validate_hive_username)
-    .unwrap_or(false);
+  let is_l1 = addr.strip_prefix("hive:").map(validate_hive_username).unwrap_or(false);
   let is_l2 = addr.starts_with("did:") || addr.starts_with("system:");
   if !is_l1 && !is_l2 {
     p.title = Some("Not Found".to_string());
@@ -158,13 +134,18 @@ async fn resolve_address(state: &OgState, addr: &str, sub: Option<&str>) -> Part
   if is_l1 {
     let username = &addr[5..];
     let acc = fetchers::fetch_l1_account(state, username).await;
-    let has_data = acc.as_ref().and_then(|a| a.account.as_ref()).is_some();
+    let has_data = acc
+      .as_ref()
+      .and_then(|a| a.account.as_ref())
+      .is_some();
     p.title = Some(format!("@{}", username));
-    p.description = Some(if has_data {
-      address_tab_description(addr, sub)
-    } else {
-      format!("Hive account @{} on Magi.", username)
-    });
+    p.description = Some(
+      if has_data {
+        address_tab_description(addr, sub)
+      } else {
+        format!("Hive account @{} on Magi.", username)
+      }
+    );
     p.og_type = Some("profile".to_string());
     return p;
   }
@@ -200,7 +181,10 @@ async fn resolve_block(db: &MongoDB, block_id: &str) -> PartialMeta {
   let is_id_lookup = matches!(lookup, BlockLookup::Id(_));
   let numeric_from_path = if is_id_lookup { block_id.parse::<u32>().ok() } else { None };
   let data = fetchers::fetch_block(db, lookup).await;
-  let height_num = data.as_ref().and_then(|d| d.block_id).or(numeric_from_path);
+  let height_num = data
+    .as_ref()
+    .and_then(|d| d.block_id)
+    .or(numeric_from_path);
   let height_str = match height_num {
     Some(n) => thousand_separator(n),
     None => abbreviate_hash(block_id, 10, 6),
@@ -212,23 +196,20 @@ async fn resolve_block(db: &MongoDB, block_id: &str) -> PartialMeta {
       let proposer_part = d.proposer.map(|v| format!(" proposed by {}", v)).unwrap_or_default();
       let ts_part = d.ts.map(|v| format!(" at {}", v)).unwrap_or_default();
       format!(
-        "Magi L2 block #{}{}{}. View transactions, op logs, contract outputs, and participation.",
+        "Magi block #{}{}{}. View transactions, op logs, contract outputs, and participation.",
         height_str,
         proposer_part,
         ts_part
       )
     }
-    None => format!("Magi L2 block #{} details on Magi Blocks Explorer.", height_str),
+    None => format!("Magi block #{} details on Magi Blocks Explorer.", height_str),
   });
   p
 }
 
 async fn resolve_contract(db: &MongoDB, contract_id: &str) -> PartialMeta {
   let mut p = PartialMeta::new();
-  let (info, cv) = tokio::join!(
-    fetchers::fetch_contract(db, contract_id),
-    fetchers::fetch_cv_info(db, contract_id)
-  );
+  let (info, cv) = tokio::join!(fetchers::fetch_contract(db, contract_id), fetchers::fetch_cv_info(db, contract_id));
   p.title = Some(format!("Contract {}", abbreviate_hash(contract_id, 10, 6)));
   let mut parts: Vec<String> = vec![format!("Magi smart contract {}", contract_id)];
   if let Some(c) = info.as_ref() {
@@ -311,12 +292,10 @@ async fn resolve_epoch(db: &MongoDB, num: i64) -> PartialMeta {
   p.description = Some(match data {
     Some(d) => {
       let proposer_part = d.proposer.map(|v| format!(" elected by {}", v)).unwrap_or_default();
-      let h_part = d.block_height
-        .map(|h| format!(" at block #{}", thousand_separator(h)))
-        .unwrap_or_default();
-      format!("Magi witness epoch #{}{}{}.", num, proposer_part, h_part)
+      let h_part = d.block_height.map(|h| format!(" at block #{}", thousand_separator(h))).unwrap_or_default();
+      format!("Magi epoch #{}{}{}.", num, proposer_part, h_part)
     }
-    None => format!("Magi witness epoch #{} details.", num),
+    None => format!("Magi epoch #{} details.", num),
   });
   p
 }
@@ -330,18 +309,9 @@ async fn resolve_staking_claim(state: &OgState, block_height: i64) -> PartialMet
     Some(c) => {
       let amount_part = c.amount.map(|v| format!(" — amount {}", v)).unwrap_or_default();
       let recv_part = c.received_n.map(|n| format!(", {} recipients", n)).unwrap_or_default();
-      format!(
-        "HBD staking interest claim at block #{}{}{}.",
-        thousand_separator(block_height),
-        amount_part,
-        recv_part
-      )
+      format!("HBD liquid staking interest claim at block #{}{}{}.", thousand_separator(block_height), amount_part, recv_part)
     }
-    None =>
-      format!(
-        "HBD staking interest claim at block #{} on Magi.",
-        thousand_separator(block_height)
-      ),
+    None => format!("HBD liquid staking interest claim at block #{} on Magi.", thousand_separator(block_height)),
   });
   p
 }
@@ -349,7 +319,11 @@ async fn resolve_staking_claim(state: &OgState, block_height: i64) -> PartialMet
 fn normalize_pathname(input: &str) -> String {
   let path = input.split('?').next().unwrap_or("/");
   let path = if path.is_empty() { "/" } else { path };
-  if path.len() > 1 && path.ends_with('/') { path[..path.len() - 1].to_string() } else { path.to_string() }
+  if path.len() > 1 && path.ends_with('/') {
+    path[..path.len() - 1].to_string()
+  } else {
+    path.to_string()
+  }
 }
 
 fn match_paginated_static(path: &str) -> Option<PartialMeta> {
@@ -369,13 +343,7 @@ fn match_paginated_static(path: &str) -> Option<PartialMeta> {
   None
 }
 
-pub async fn resolve_meta(
-  pathname: &str,
-  origin: &str,
-  og_image: &str,
-  db: &MongoDB,
-  state: &OgState
-) -> MetaTags {
+pub async fn resolve_meta(pathname: &str, origin: &str, og_image: &str, db: &MongoDB, state: &OgState) -> MetaTags {
   let path = normalize_pathname(pathname);
   let canonical = format!("{}{}", origin, if path == "/" { "/" } else { path.as_str() });
 
@@ -387,7 +355,10 @@ pub async fn resolve_meta(
     return finalize(p, canonical, og_image);
   }
 
-  let segments: Vec<&str> = path.split('/').filter(|s| !s.is_empty()).collect();
+  let segments: Vec<&str> = path
+    .split('/')
+    .filter(|s| !s.is_empty())
+    .collect();
 
   if segments.len() >= 2 {
     match segments[0] {
@@ -395,11 +366,7 @@ pub async fn resolve_meta(
         return finalize(resolve_tx(state, segments[1]).await, canonical, og_image);
       }
       "address" => {
-        return finalize(
-          resolve_address(state, segments[1], segments.get(2).copied()).await,
-          canonical,
-          og_image
-        );
+        return finalize(resolve_address(state, segments[1], segments.get(2).copied()).await, canonical, og_image);
       }
       "block" => {
         return finalize(resolve_block(db, segments[1]).await, canonical, og_image);
@@ -408,18 +375,10 @@ pub async fn resolve_meta(
         return finalize(resolve_contract(db, segments[1]).await, canonical, og_image);
       }
       "token" => {
-        return finalize(
-          resolve_token(state, segments[1], segments.get(2).copied()).await,
-          canonical,
-          og_image
-        );
+        return finalize(resolve_token(state, segments[1], segments.get(2).copied()).await, canonical, og_image);
       }
       "nft" => {
-        return finalize(
-          resolve_nft(state, segments[1], segments.get(2).copied()).await,
-          canonical,
-          og_image
-        );
+        return finalize(resolve_nft(state, segments[1], segments.get(2).copied()).await, canonical, og_image);
       }
       "epoch" if is_positive_int(segments[1]) => {
         let num: i64 = segments[1].parse().unwrap_or(0);
@@ -444,18 +403,14 @@ pub async fn resolve_meta(
     let username = &segments[0][1..];
     if validate_hive_username(username) {
       let addr = format!("hive:{}", username);
-      return finalize(
-        resolve_address(state, &addr, segments.get(1).copied()).await,
-        canonical,
-        og_image
-      );
+      return finalize(resolve_address(state, &addr, segments.get(1).copied()).await, canonical, og_image);
     }
   }
 
   finalize(
     PartialMeta {
       title: Some("Not Found".to_string()),
-      description: Some(format!("Path {} was not found on Magi Blocks Explorer.", path)),
+      description: Some(format!("Path {} was not found on Magi Blocks.", path)),
       og_type: None,
       noindex: true,
     },
