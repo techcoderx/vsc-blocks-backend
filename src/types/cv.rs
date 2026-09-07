@@ -150,5 +150,21 @@ lazy_static! {
         img_digest: format!("sha256:89a77cc87b191399077be51a295d1d29569314931f334b2730427d7ed3a2b18e")
       },
     ),
+    (
+      format!("0.41.1"),
+      CVTinyGoLibVersions {
+        go: format!("1.26.2"),
+        llvm: format!("20.1.1"),
+        img_digest: format!("tinygo/tinygo@sha256:b216f534ddbf277444407b014a3328b5c1ade403cc397f3ab48a14789bf99d0e")
+      }
+    ),
+    (
+      format!("0.42.0"),
+      CVTinyGoLibVersions {
+        go: format!("1.27.0"),
+        llvm: format!("22.1.4"),
+        img_digest: format!("tinygo/tinygo@sha256:52907162ca3ba807c3c0914e07daffc1fe0c50ce91445ec43a0428337dc1b901")
+      }
+    )
   ]);
 }
