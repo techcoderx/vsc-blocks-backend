@@ -2,26 +2,25 @@ use futures_util::StreamExt;
 use serde_json::{ Value, from_value };
 use tokio::{ time::{ sleep, Duration }, sync::RwLock };
 use mongodb::bson::doc;
-use reqwest;
 use log::{ error, info };
 use std::sync::Arc;
 use bv_decoder::BvWeights;
-use crate::{ config::config, mongo::MongoDB, types::{ hive::{ CustomJson, TxByHash }, vsc::{ json_to_bson, Signature } } };
+use crate::{ haf::HAFDB, mongo::MongoDB, types::vsc::{ json_to_bson, Signature } };
 
 #[derive(Clone)]
 pub struct ElectionIndexer {
-  http_client: reqwest::Client,
   db: MongoDB,
+  haf: HAFDB,
   is_running: Arc<RwLock<bool>>,
 }
 
 impl ElectionIndexer {
-  pub fn init(http_client: &reqwest::Client, db: &MongoDB) -> ElectionIndexer {
-    return ElectionIndexer { http_client: http_client.clone(), db: db.clone(), is_running: Arc::new(RwLock::new(false)) };
+  pub fn init(db: &MongoDB, haf: &HAFDB) -> ElectionIndexer {
+    return ElectionIndexer { db: db.clone(), haf: haf.clone(), is_running: Arc::new(RwLock::new(false)) };
   }
 
   pub fn start(&self) {
-    let http_client = self.http_client.clone();
+    let haf = self.haf.clone();
     let election_db = self.db.elections.clone();
     let indexer2 = self.db.indexer2.clone();
     let witness_stats = self.db.witness_stats.clone();
@@ -57,32 +56,45 @@ impl ElectionIndexer {
           continue;
         }
         let mut next_epochs = next_epochs.unwrap();
-        let mut next_num = num;
+        let mut epochs = Vec::new();
         while let Some(ep) = next_epochs.next().await {
           if ep.is_err() {
             error!("Failed to deserialize election: {}", ep.unwrap_err().to_string());
             break 'mainloop;
           }
-          let epoch = ep.unwrap();
-          next_num += 1;
-          let tx = http_client
-            .get(format!("{}/hafah-api/transactions/{}?include-virtual=false", config.hive_rpc.clone(), epoch.tx_id.clone()))
-            .send().await;
-          if tx.is_err() {
-            error!("{}", tx.unwrap_err());
-            sleep(Duration::from_secs(120)).await;
-            continue 'mainloop;
-          }
-          let tx = match tx.unwrap().json::<TxByHash<CustomJson>>().await {
+          epochs.push(ep.unwrap());
+        }
+        let mut hashes = Vec::with_capacity(epochs.len());
+        for ep in &epochs {
+          match hex::decode(ep.tx_id.strip_prefix("0x").unwrap_or(&ep.tx_id)) {
+            Ok(v) => hashes.push(v),
             Err(e) => {
-              error!("{}", e.to_string());
+              error!("Failed to decode transaction id {}: {}", ep.tx_id, e);
               sleep(Duration::from_secs(60)).await;
               continue 'mainloop;
             }
-            Ok(t) => t,
+          }
+        }
+        let txs = haf.get_custom_json_txs(&hashes).await;
+        if txs.is_err() {
+          error!("Failed to fetch transaction details from HAF: {}", txs.unwrap_err());
+          sleep(Duration::from_secs(120)).await;
+          continue 'mainloop;
+        }
+        let mut txs = txs.unwrap();
+        let mut next_num = num;
+        for (i, epoch) in epochs.into_iter().enumerate() {
+          next_num += 1;
+          let tx = match txs.remove(&hashes[i]) {
+            Some(t) => t,
+            None => {
+              error!("No transaction details found in HAF for tx {}", epoch.tx_id);
+              sleep(Duration::from_secs(60)).await;
+              continue 'mainloop;
+            }
           };
           // there should be only one operation here
-          let j = match serde_json::from_str::<Value>(&tx.transaction_json.operations[0].value.json) {
+          let j = match serde_json::from_str::<Value>(&tx.json) {
             Ok(json) => json,
             Err(e) => {
               error!("Failed to parse json, this is a fatal error likely caused by a bug in go-vsc-node. {}", e);
@@ -120,7 +132,7 @@ impl ElectionIndexer {
               doc! { "epoch": epoch.epoch as i64 },
               doc! { "$set": doc! {
                   "be_info": doc! {
-                    "ts": &tx.timestamp,
+                    "ts": tx.timestamp.format("%Y-%m-%dT%H:%M:%S").to_string(),
                     "signature": json_to_bson(signature),
                     "voted_weight": weights.0 as i64,
                     "eligible_weight": weights.1 as i64

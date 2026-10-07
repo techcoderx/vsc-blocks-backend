@@ -42,6 +42,7 @@ async fn setup_db() -> MongoDB {
   let db = MongoDB::init(
     &(DbConf {
       mongo_url: format!("mongodb://127.0.0.1:27017"),
+      haf_url: None,
       magi_db_name: format!("mbb-e2e"),
       be_db_name: format!("mbb-e2e-be"),
       cv_db_name: format!("mbb-e2e-cv"),

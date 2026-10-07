@@ -1,4 +1,5 @@
 use crate::{
+  haf::HAFDB,
   indexer::{ blocks::BlockIndexer, bridge::BridgeStatsIndexer, epoch::ElectionIndexer, stats::NetworkStatsIndexer },
   mongo::MongoDB,
 };
@@ -12,12 +13,12 @@ pub struct Indexer {
 }
 
 impl Indexer {
-  pub fn init(http_client: &reqwest::Client, db: &MongoDB) -> Indexer {
+  pub fn init(db: &MongoDB, haf: &HAFDB) -> Indexer {
     return Indexer {
-      block_idxer: BlockIndexer::init(http_client, db),
-      election_idxer: ElectionIndexer::init(http_client, db),
+      block_idxer: BlockIndexer::init(db, haf),
+      election_idxer: ElectionIndexer::init(db, haf),
       bridge_stats_idxer: BridgeStatsIndexer::init(db),
-      network_stats_idxer: NetworkStatsIndexer::init(http_client, db),
+      network_stats_idxer: NetworkStatsIndexer::init(db, haf),
     };
   }
 

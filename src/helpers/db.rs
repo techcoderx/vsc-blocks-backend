@@ -1,5 +1,5 @@
-use crate::{ mongo::MongoDB, types::{ hive::DgpAtBlock, vsc::{ ElectionMember, LedgerBalance, WitnessStat, Witnesses } } };
-use chrono::{ DateTime, NaiveDateTime, Utc };
+use crate::{ haf::HAFDB, mongo::MongoDB, types::vsc::{ ElectionMember, LedgerBalance, WitnessStat, Witnesses } };
+use chrono::{ DateTime, Utc };
 use serde::Serialize;
 use futures_util::StreamExt;
 use std::error::Error as Error2;
@@ -157,20 +157,14 @@ pub async fn get_total_withdrawals(db: &MongoDB, asset: &str, start_block: u32, 
 
 pub async fn get_last_processed_block_ts(
   db: &MongoDB,
-  http_client: &reqwest::Client,
-  rpc: String
+  haf: &HAFDB
 ) -> Result<(u32, DateTime<Utc>), Box<dyn Error2 + Send + Sync>> {
   let db = db.clone();
-  let http_client = http_client.clone();
   let last_processed_block = db.l1_blocks
     .find_one(doc! {}).await?
     .map(|s| s.last_processed_block)
     .unwrap_or(1);
-  let current_state = http_client
-    .get(format!("{}/hafah-api/global-state?block-num={}", rpc, last_processed_block.to_string()))
-    .send().await?;
-  let current_state = current_state.json::<DgpAtBlock>().await?;
-  Ok((current_state.block_num, NaiveDateTime::parse_from_str(&current_state.created_at, "%Y-%m-%dT%H:%M:%S")?.and_utc()))
+  Ok(haf.get_block_time(last_processed_block as u32).await?)
 }
 
 pub fn apply_block_range(filter: Document, bh_field: &str, from_blk: Option<i64>, to_blk: Option<i64>) -> Document {

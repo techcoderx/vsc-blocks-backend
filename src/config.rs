@@ -73,6 +73,7 @@ pub struct GiteaConf {
 #[derive(Serialize, Deserialize, Clone)]
 pub struct DbConf {
   pub mongo_url: String,
+  pub haf_url: Option<String>,
   pub magi_db_name: String,
   pub be_db_name: String,
   pub cv_db_name: String,
@@ -128,6 +129,7 @@ impl TomlConfig {
         network_conf: None,
         db: DbConf {
           mongo_url: format!("mongodb://localhost:27017"),
+          haf_url: Some(String::from("postgresql://haf_owner@localhost:5432/haf_block_log")),
           magi_db_name: format!("go-vsc"),
           be_db_name: format!("vsc2"),
           cv_db_name: format!("vsc-cv"),

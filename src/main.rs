@@ -7,6 +7,7 @@ use std::{ process, str::FromStr };
 use log::{ error, info, LevelFilter };
 mod config;
 mod constants;
+mod haf;
 mod mongo;
 mod types;
 mod endpoints;
@@ -70,7 +71,21 @@ async fn main() -> std::io::Result<()> {
     false => None,
   };
   if config.be_indexer.unwrap_or(false) {
-    let idxer = indexer::indexer::Indexer::init(&http_client, &db);
+    let haf_url = match &config.db.haf_url {
+      Some(url) => url,
+      None => {
+        error!("Missing haf_url in db config");
+        process::exit(1);
+      }
+    };
+    let haf = match haf::HAFDB::init(haf_url).await {
+      Ok(h) => h,
+      Err(e) => {
+        error!("Failed to initialize HAF database: {}", e.to_string());
+        process::exit(1);
+      }
+    };
+    let idxer = indexer::indexer::Indexer::init(&db, &haf);
     idxer.start();
   }
   if config.discord.is_some() {

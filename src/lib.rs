@@ -1,5 +1,6 @@
 pub mod config;
 pub mod constants;
+pub mod haf;
 pub mod mongo;
 pub mod types;
 pub mod endpoints;

@@ -4,33 +4,32 @@ use std::sync::Arc;
 use chrono::{ Datelike, Days };
 use log::{ error, info, warn };
 use crate::{
-  config::config,
   constants::from_config,
+  haf::HAFDB,
   helpers::{
     datetime::*,
     db::{ get_last_processed_block_ts, get_members_at_l1_block, get_total_deposits, get_total_withdrawals },
   },
   mongo::MongoDB,
-  types::hive::DgpAtBlock,
 };
 
 #[derive(Clone)]
 pub struct NetworkStatsIndexer {
-  http_client: reqwest::Client,
   db: MongoDB,
+  haf: HAFDB,
   is_running: Arc<RwLock<bool>>,
 }
 
 impl NetworkStatsIndexer {
-  pub fn init(http_client: &reqwest::Client, db: &MongoDB) -> NetworkStatsIndexer {
+  pub fn init(db: &MongoDB, haf: &HAFDB) -> NetworkStatsIndexer {
     return NetworkStatsIndexer {
-      http_client: http_client.clone(),
       db: db.clone(),
+      haf: haf.clone(),
       is_running: Arc::new(RwLock::new(false)),
     };
   }
   pub fn start(&self) {
-    let http_client = self.http_client.clone();
+    let haf = self.haf.clone();
     let db = self.db.clone();
     let running = Arc::clone(&self.is_running);
     let start_date = match parse_date_str(&from_config().start_date.clone()) {
@@ -61,7 +60,7 @@ impl NetworkStatsIndexer {
         if !*r {
           break;
         }
-        let head = get_last_processed_block_ts(&db, &http_client, config.hive_rpc.clone()).await;
+        let head = get_last_processed_block_ts(&db, &haf).await;
         let (_, head_time) = match head {
           Err(_) => {
             error!("Failed to query last processed state");
@@ -74,27 +73,23 @@ impl NetworkStatsIndexer {
         if date.date_naive() < head_time.date_naive() {
           let date_str = format_date(date.day(), date.month(), date.year());
           let next_date = date.checked_add_days(Days::new(1)).expect("Failed to get following date");
-          let next_date_str = format_date(next_date.day(), next_date.month(), next_date.year());
           let (start_block, end_block) = join!(
-            http_client.get(format!("{}/hafah-api/global-state?block-num={}", config.hive_rpc, &date_str)).send(),
-            http_client.get(format!("{}/hafah-api/global-state?block-num={}", config.hive_rpc, &next_date_str)).send()
+            haf.get_first_block_at_or_after(date.naive_utc()),
+            haf.get_first_block_at_or_after(next_date.naive_utc())
           );
-          if start_block.is_err() || end_block.is_err() {
-            error!("Failed to query start or end block for {}", &date_str);
-            sleep(Duration::from_secs(120)).await;
-            continue 'mainloop;
-          }
-          let (start_block, end_block) = join!(
-            start_block.unwrap().json::<DgpAtBlock>(),
-            end_block.unwrap().json::<DgpAtBlock>()
-          );
-          if start_block.is_err() || end_block.is_err() {
-            error!("Failed to parse start or end block for date {}", date_str);
-            sleep(Duration::from_secs(60)).await;
-            continue 'mainloop;
-          }
-          let start_block = start_block.unwrap().block_num;
-          let end_block = end_block.unwrap().block_num;
+          let (start_block, end_block) = match (start_block, end_block) {
+            (Ok(Some(s)), Ok(Some(e))) => (s, e),
+            (Err(e), _) | (_, Err(e)) => {
+              error!("Failed to query start or end block for {}: {}", &date_str, e);
+              sleep(Duration::from_secs(120)).await;
+              continue 'mainloop;
+            }
+            _ => {
+              error!("Failed to query start or end block for {}", &date_str);
+              sleep(Duration::from_secs(120)).await;
+              continue 'mainloop;
+            }
+          };
           info!("Processing stats for {} range [{},{})", &date_str, start_block, end_block);
           let (
             txs,

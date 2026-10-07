@@ -2,30 +2,29 @@ use futures_util::StreamExt;
 use serde_json::Value;
 use tokio::{ time::{ sleep, Duration }, sync::RwLock };
 use mongodb::{ bson::{ doc, Bson }, options::FindOneOptions };
-use reqwest;
 use log::{ error, info };
 use std::sync::Arc;
 use bv_decoder::BvWeights;
-use crate::{ config::config, mongo::MongoDB, types::{ hive::{ CustomJson, TxByHash }, vsc::{ json_to_bson, EpochBlocksInfo } } };
+use crate::{ haf::HAFDB, mongo::MongoDB, types::vsc::{ json_to_bson, EpochBlocksInfo } };
 
 #[derive(Clone)]
 pub struct BlockIndexer {
-  http_client: reqwest::Client,
   db: MongoDB,
+  haf: HAFDB,
   is_running: Arc<RwLock<bool>>,
 }
 
 impl BlockIndexer {
-  pub fn init(http_client: &reqwest::Client, db: &MongoDB) -> BlockIndexer {
+  pub fn init(db: &MongoDB, haf: &HAFDB) -> BlockIndexer {
     return BlockIndexer {
-      http_client: http_client.clone(),
       db: db.clone(),
+      haf: haf.clone(),
       is_running: Arc::new(RwLock::new(false)),
     };
   }
 
   pub fn start(&self) {
-    let http_client = self.http_client.clone();
+    let haf = self.haf.clone();
     let blocks_db = self.db.blocks.clone();
     let election_db = self.db.elections.clone();
     let indexer2 = self.db.indexer2.clone();
@@ -62,32 +61,45 @@ impl BlockIndexer {
           continue;
         }
         let mut next_blocks = next_blocks.unwrap();
-        let mut next_nums = (nums.0, nums.1);
+        let mut headers = Vec::new();
         while let Some(b) = next_blocks.next().await {
           if b.is_err() {
             error!("Failed to deserialize block header: {}", b.unwrap_err().to_string());
             break 'mainloop;
           }
-          let block = b.unwrap();
-          next_nums.1 += 1;
-          let tx = http_client
-            .get(format!("{}/hafah-api/transactions/{}?include-virtual=false", config.hive_rpc.clone(), block.id.clone()))
-            .send().await;
-          if tx.is_err() {
-            error!("{}", tx.unwrap_err());
-            sleep(Duration::from_secs(120)).await;
-            continue 'mainloop;
-          }
-          let tx = match tx.unwrap().json::<TxByHash<CustomJson>>().await {
+          headers.push(b.unwrap());
+        }
+        let mut hashes = Vec::with_capacity(headers.len());
+        for h in &headers {
+          match hex::decode(h.id.strip_prefix("0x").unwrap_or(&h.id)) {
+            Ok(v) => hashes.push(v),
             Err(e) => {
-              error!("{}, {}", e.to_string(), block.id.clone());
+              error!("Failed to decode transaction id {}: {}", h.id, e);
               sleep(Duration::from_secs(60)).await;
               continue 'mainloop;
             }
-            Ok(t) => t,
+          }
+        }
+        let txs = haf.get_custom_json_txs(&hashes).await;
+        if txs.is_err() {
+          error!("Failed to fetch transaction details from HAF: {}", txs.unwrap_err());
+          sleep(Duration::from_secs(120)).await;
+          continue 'mainloop;
+        }
+        let mut txs = txs.unwrap();
+        let mut next_nums = (nums.0, nums.1);
+        for (i, block) in headers.into_iter().enumerate() {
+          next_nums.1 += 1;
+          let tx = match txs.remove(&hashes[i]) {
+            Some(t) => t,
+            None => {
+              error!("No transaction details found in HAF for tx {}", block.id);
+              sleep(Duration::from_secs(60)).await;
+              continue 'mainloop;
+            }
           };
           // there should be one operation, otherwise this is a bug with go-vsc-node
-          let j = serde_json::from_str::<Value>(&tx.transaction_json.operations[0].value.json);
+          let j = serde_json::from_str::<Value>(&tx.json);
           if j.is_err() {
             error!("Failed to parse json, this is a fatal error likely caused by a bug in go-vsc-node.");
             break 'mainloop;

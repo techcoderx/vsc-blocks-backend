@@ -19,7 +19,6 @@ pub struct DgpAtBlock {
 #[derive(Clone, Debug, Deserialize)]
 pub struct CustomJson {
   pub id: String,
-  pub json: String,
   // pub required_auths: Vec<String>,
   // pub required_posting_auths: Vec<String>,
 }
@@ -39,5 +38,4 @@ pub struct Transaction<T> {
 #[derive(Clone, Debug, Deserialize)]
 pub struct TxByHash<T> {
   pub transaction_json: Transaction<T>,
-  pub timestamp: String,
 }
