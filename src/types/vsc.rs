@@ -57,18 +57,6 @@ pub struct LedgerBalance {
 }
 
 #[derive(Clone, Serialize, Deserialize)]
-pub struct LedgerOpLog {
-  pub to: String,
-  pub from: String,
-  pub amount: u64,
-  pub asset: String,
-  pub memo: String,
-  #[serde(rename = "type")]
-  pub r#type: String,
-  pub params: Option<Value>,
-}
-
-#[derive(Clone, Serialize, Deserialize)]
 pub struct DIDKey {
   ct: String,
   t: String,
@@ -215,7 +203,6 @@ pub struct TransactionRecord {
   pub required_auths: Vec<String>,
   pub nonce: Option<i64>,
   pub rc_limit: Option<u64>,
-  // pub data: Document,
   // #[serde(rename = "anchr_block")]
   // pub anchored_block: String,
   #[serde(rename = "anchr_index")]
@@ -226,7 +213,6 @@ pub struct TransactionRecord {
   // pub first_seen: DateTime<Utc>,
   pub ops: Vec<OpInfo>,
   pub output: Option<Vec<Output>>,
-  pub ledger: Vec<LedgerOpLog>,
 }
 
 #[derive(Clone, Serialize, Deserialize)]
