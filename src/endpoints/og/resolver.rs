@@ -54,7 +54,7 @@ fn static_to_partial(s: &StaticMeta) -> PartialMeta {
 fn address_tab_description(addr: &str, sub: Option<&str>) -> String {
   let target = if let Some(name) = addr.strip_prefix("hive:") { format!("@{}", name) } else { addr.to_string() };
   match sub {
-    Some("hiveops") => format!("Hive L1 operation history for {} on Magi.", target),
+    // Some("hiveops") => format!("Hive L1 operation history for {} on Magi.", target),
     Some("ledger") => format!("Ledger history for {} on Magi — deposits, withdrawals, transfers, interest, and fees.", target),
     Some("actions") => format!("Ledger actions initiated by {} on Magi.", target),
     Some("deposits") => format!("Bridge deposits for {} on Magi.", target),

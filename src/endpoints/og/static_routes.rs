@@ -38,12 +38,12 @@ lazy_static! {
       og_type: None,
       noindex: false,
     });
-    m.insert("/transactions/hive", StaticMeta {
-      title: "Hive Transactions",
-      description: "Latest Hive L1 operations relevant to Magi.",
-      og_type: None,
-      noindex: false,
-    });
+    // m.insert("/transactions/hive", StaticMeta {
+    //   title: "Hive Transactions",
+    //   description: "Latest Hive L1 operations relevant to Magi.",
+    //   og_type: None,
+    //   noindex: false,
+    // });
     m.insert("/contracts", StaticMeta {
       title: "Contracts",
       description: "Contracts deployed on Magi.",
