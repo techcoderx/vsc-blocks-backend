@@ -43,6 +43,7 @@ async fn main() -> std::io::Result<()> {
     .filter_module("rustls", LevelFilter::Off)
     .filter_module("hyper", LevelFilter::Off)
     .filter_module("tungstenite", LevelFilter::Off)
+    .filter_module("tokio_postgres", LevelFilter::Off)
     .default_format()
     .init();
   info!("Version: {}", env!("CARGO_PKG_VERSION"));
