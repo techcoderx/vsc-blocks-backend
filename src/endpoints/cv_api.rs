@@ -226,8 +226,8 @@ async fn verify_new(
         } else {
           return Err(RespErr::CvSimilarMatch);
         }
-      } else if is_fail && similar.request_ts.to_chrono() + Duration::hours(12) > Utc::now() {
-        return Err(RespErr::CvRetryLater);
+        // } else if is_fail && similar.request_ts.to_chrono() + Duration::hours(12) > Utc::now() {
+        //   return Err(RespErr::CvRetryLater);
       } else if similar.status == "queued" {
         if &similar.contract_id == &address {
           return Err(RespErr::BadRequest { msg: String::from("Contract is already queued for verification.") });
