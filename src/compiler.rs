@@ -436,6 +436,7 @@ impl Compiler {
               let output = output.unwrap();
               let output_cid = put_dag_raw(output.as_slice());
               let cid_match = &output_cid == &next_contract.code;
+              debug!("Output CID: {}", &output_cid);
               info!("Contract bytecode match: {}", cid_match.to_string().to_ascii_uppercase());
               let exports = list_exports(&output)
                 .map(|e| Some(e))
