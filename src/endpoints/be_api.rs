@@ -8,8 +8,8 @@ use std::cmp::{ max, min };
 use crate::{
   config::config,
   constants::from_config,
-  helpers::{ datetime::parse_date_str, db::{ apply_block_range, get_props, get_witness_stats } },
-  types::{ hive::{ CustomJson, TxByHash }, server::{ Context, RespErr }, vsc::{ BridgeStats, UserStats, WitnessStatResult } },
+  helpers::{ datetime::parse_date_str, db::{ apply_block_range, get_props, get_witness_stake, get_witness_stats } },
+  types::{ hive::{ CustomJson, TxByHash }, server::{ Context, RespErr }, vsc::{ BridgeStats, UserStats, WitnessStatResponse, WitnessStatResult } },
 };
 
 #[get("")]
@@ -26,8 +26,16 @@ async fn props(ctx: web::Data<Context>) -> Result<HttpResponse, RespErr> {
 #[get("/witness/{username}/stats")]
 async fn witness_stats(path: web::Path<String>, ctx: web::Data<Context>) -> Result<HttpResponse, RespErr> {
   let user = path.into_inner();
-  let stats = get_witness_stats(&ctx.db, user).await.map_err(|e| RespErr::DbErr { msg: e.to_string() })?;
-  Ok(HttpResponse::Ok().json(stats))
+  let stats = get_witness_stats(&ctx.db, user.clone()).await.map_err(|e| RespErr::DbErr { msg: e.to_string() })?;
+  let stake = get_witness_stake(&ctx.db, user).await.map_err(|e| RespErr::DbErr { msg: e.to_string() })?;
+  Ok(HttpResponse::Ok().json(WitnessStatResponse {
+    proposer: stats.proposer,
+    block_count: stats.block_count,
+    election_count: stats.election_count,
+    last_block: stats.last_block,
+    last_epoch: stats.last_epoch,
+    stake,
+  }))
 }
 
 #[get("/witnesses/stats")]
@@ -47,7 +55,11 @@ async fn get_active_witness_stats(ctx: web::Data<Context>) -> Result<HttpRespons
   };
   let mut stats: Vec<WitnessStatResult> = Vec::new();
   for i in 0..epoch.members.len() {
-    let stat = get_witness_stats(&ctx.db, epoch.members[i].account.clone()).await.map_err(|e| RespErr::DbErr {
+    let member = &epoch.members[i];
+    let stat = get_witness_stats(&ctx.db, member.account.clone()).await.map_err(|e| RespErr::DbErr {
+      msg: e.to_string(),
+    })?;
+    let stake = get_witness_stake(&ctx.db, member.account.clone()).await.map_err(|e| RespErr::DbErr {
       msg: e.to_string(),
     })?;
     stats.push(WitnessStatResult {
@@ -57,7 +69,8 @@ async fn get_active_witness_stats(ctx: web::Data<Context>) -> Result<HttpRespons
       last_block: stat.last_block,
       last_epoch: stat.last_epoch,
       weight: epoch.weights[i],
-      did_key: epoch.members[i].key.clone(),
+      did_key: member.key.clone(),
+      stake,
     });
   }
   Ok(HttpResponse::Ok().json(stats))
