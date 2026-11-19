@@ -91,6 +91,18 @@ pub struct WitnessStat {
 }
 
 #[derive(Clone, Serialize, Deserialize)]
+pub struct WitnessStatResponse {
+  #[serde(rename = "_id")]
+  pub proposer: String,
+  pub block_count: Option<i32>,
+  pub election_count: Option<i32>,
+  pub last_block: Option<i32>,
+  pub last_epoch: Option<i32>,
+  /// Current consensus stake in milli-HIVE.
+  pub stake: u64,
+}
+
+#[derive(Clone, Serialize, Deserialize)]
 pub struct WitnessStatResult {
   #[serde(rename = "_id")]
   pub proposer: String,
@@ -100,6 +112,8 @@ pub struct WitnessStatResult {
   pub last_epoch: Option<i32>,
   pub weight: u64,
   pub did_key: String,
+  /// Current consensus stake in milli-HIVE.
+  pub stake: u64,
 }
 
 #[derive(Clone, Serialize, Deserialize)]

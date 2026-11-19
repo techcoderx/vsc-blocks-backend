@@ -67,6 +67,16 @@ pub async fn get_witness_stats(db: &MongoDB, user: String) -> Result<WitnessStat
   Ok(stats)
 }
 
+/// Returns the witness' current consensus stake in milli-HIVE (`hive_consensus`).
+///
+/// Mirrors the node's `witnessStake` GraphQL resolver: the current balance is the
+/// account's latest `ledger_balances` record. Witness usernames are bare Hive names,
+/// while ledger balances are keyed under the `hive:` account prefix.
+pub async fn get_witness_stake(db: &MongoDB, user: String) -> Result<u64, Error> {
+  let account = if user.starts_with("hive:") { user } else { format!("hive:{}", user) };
+  Ok(get_user_balance(db, account).await?.hive_consensus)
+}
+
 pub async fn get_user_balance(db: &MongoDB, user: String) -> Result<LedgerBalance, Error> {
   let db = db.clone();
   let opt = FindOneOptions::builder()
