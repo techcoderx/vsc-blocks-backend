@@ -219,7 +219,7 @@ async fn verify_new(
   // check if any contracts including this with identical bytecode that have been previously verified or already verifying
   match ctx.db.cv_contracts.find_one(doc! { "_id": &contract.code }).await.map_err(|e| RespErr::DbErr { msg: e.to_string() })? {
     Some(similar) => {
-      let is_fail = similar.status == "failed" || similar.status == "not match";
+      // let is_fail = similar.status == "failed" || similar.status == "not match";
       if similar.status == CVStatus::Success.to_string() {
         if &similar.contract_id == &address {
           return Err(RespErr::BadRequest { msg: String::from("Contract is already verified") });
